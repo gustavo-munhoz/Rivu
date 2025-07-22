@@ -1,0 +1,107 @@
+classDiagram
+direction LR
+
+  class Classifier {
+    <<interface>>
+    + get_votes_for_instance(inst: Instance) Option~Vec~usize~~
+    + get_prediction_for_instance(inst: Instance) Option~Vec~usize~~
+    + set_model_context(header: InstanceHeader)
+    + train_on_instance(inst: Instance)
+    + get_model_measurements() Vec~Measurement~
+    + context_is_compatible(orig: InstanceHeader, new: InstanceHeader) bool
+  }
+
+  class AttributeClassObserver {
+    <<interface>>
+    + observe_attribute_class(att_val: usize, class_val: i32, weight: usize)
+    + probability_of_attribute_value_given_class(att_val: usize, class_val: i32) usize
+  }
+
+  class LearningNode {
+    <<interface>>
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+  }
+
+  class HoeffdingTree {
+    - tree_root: Node
+    - decision_node_count: i32
+    - split_confidence: usize
+    + new_learning_node(initial_class_observations: Vec~usize~) Node
+    + train_on_instance_impl(inst: Instance)
+    + hoeffding_bound(range: usize, confidence: usize, n: usize) usize
+    + attempt_to_split(node: ActiveLearningNode, parent: SplitNode, parent_idx: i32) Result~&#40&#41, Error~
+    + get_votes_for_instance(inst: Instance) Vec~usize~
+    + deactivate_learning_node(to_deactivate: ActiveLearningNode, parent: SplitNode, parent_branch: i32)
+    + new() HoeffdingTree
+  }
+
+  class NaiveBayes {
+    - observed_class_distribution: Vec~usize~
+    - attribute_observers: Vec~AttributeClassObserver~
+    + train_on_instance(inst: Instance)
+    + get_votes_for_instance(inst: Instance) Vec~usize~
+    + nb_prediction(inst: Instance, class_dist: Vec~usize~, observers: Vec~AttributeClassObserver~) Option~Vec~usize~~
+    + nb_prediction_log(inst: Instance, class_dist: Vec~usize~, obs1: Vec~AttributeClassObserver~, obs2: Vec~AttributeClassObserver~) Vec~usize~
+    + new() NaiveBayes
+  }
+
+  class Node {
+    - is_leaf: bool
+    - class_distribution: Vec~usize~
+    + weight_seen() usize
+    + is_leaf() bool
+    + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
+  }
+
+  class SplitNode {
+    - split_test: InstanceConditionalTest
+    - children: Vec~Node~
+    + set_child(idx: i32, child: Node)
+    + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
+  }
+
+  class ActiveLearningNode {
+    - weight_seen_at_last_split_eval: usize
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+  }
+
+  class InactiveLearningNode {
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+  }
+
+  class LearningNodeNB {
+    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+  }
+
+  class LearningNodeNBAdaptive {
+    - mc_correct_weight: usize
+    - nb_correct_weight: usize
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+  }
+
+  class InstanceConditionalTest {
+    + branch_for_instance(inst: Instance) Option~i32~
+  }
+
+  class FoundNode {
+    - node: Node
+    - parent: SplitNode
+    - parent_branch: i32
+  }
+
+  HoeffdingTree ..|> Classifier
+  NaiveBayes   ..|> Classifier
+
+  LearningNodeNB        ..|> ActiveLearningNode
+  LearningNodeNBAdaptive ..|> LearningNodeNB
+
+  ActiveLearningNode   ..|> LearningNode
+  InactiveLearningNode ..|> LearningNode
+  SplitNode            ..|> Node
+
+  HoeffdingTree --> Node
+  SplitNode     --> InstanceConditionalTest
+  FoundNode     --> Node
+  FoundNode     --> SplitNode
+  NaiveBayes    --> AttributeClassObserver

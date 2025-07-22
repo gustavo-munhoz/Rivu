@@ -1,0 +1,55 @@
+classDiagram
+direction LR 
+
+  class Snapshot {
+    + instances_seen: u64
+    + accuracy: f64
+    + kappa: f64
+    + ram_hours: f64
+    + seconds: f64
+  }
+  Snapshot ..|> Display
+
+  class LearningCurve {
+    - entries: Vec~Snapshot~
+    + push(snap: Snapshot)
+    + len() usize
+    + latest() Option~Snapshot~
+    + export(path, fmt: CurveFormat)
+  }
+
+  class CurveFormat {
+    <<enumeration>>
+    Csv
+    Tsv
+    Json
+  }
+
+  class PrequentialEvaluator {
+    - learner: Box~dyn Classifier~
+    - stream:  Box~dyn Stream~
+    - evaluator: Box~dyn PerformanceEvaluator~
+
+    - curve: LearningCurve
+
+    - max_instances: Option~u64~
+    - max_seconds: Option~u64~
+    - sample_frequency: u64
+    - mem_check_frequency: u64
+
+    - processed: u64
+    - start_time: Instant
+    - last_sample_time: Instant
+    - ram_hours: f64
+
+    + new(learner: Classifier, stream: Stream, evaluator: PrequentialEvaluator, max_instances: Option~u64~, max_seconds: Option~u64~, sample_frequency: u64, mem_check_frequency: u64) Result~PrequentialEvaluator, Error~
+    + run()
+    + curve() &LearningCurve
+  }
+
+  PrequentialEvaluator ..> Stream                : pulls
+  PrequentialEvaluator ..> Classifier           : tests/trains
+  PrequentialEvaluator ..> PerformanceEvaluator : feeds
+  PrequentialEvaluator "1" --* "1" LearningCurve : builds
+  LearningCurve "many" --* "1" Snapshot         : contains
+  LearningCurve ..> CurveFormat                 : export

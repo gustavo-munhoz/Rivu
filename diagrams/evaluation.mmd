@@ -1,0 +1,48 @@
+classDiagram
+direction LR
+
+  class PerformanceEvaluator {
+    <<interface>>
+    + reset()
+    + add_result(example: &dyn Instance, class_votes: Vec~f64~)
+    + performance() Vec~Measurement~
+  }
+
+  class Measurement {
+    - name: String
+    - value: f64
+  }
+  Measurement ..|> Serializable
+
+  class Estimator {
+    <<interface>>
+    + add(v: f64)
+    + estimation() f64
+  }
+
+  class BasicEstimator {
+    - len: f64
+    - sum: f64
+    + add(v: f64)
+    + estimation() f64
+  }
+  BasicEstimator ..|> Estimator
+  BasicEstimator ..|> Serializable
+
+  class BasicClassificationEvaluator {
+    - weight_correct: Box~dyn Estimator~
+    - row_kappa: Vec~Box~dyn Estimator~~
+    - col_kappa: Vec~Box~dyn Estimator~~
+    - precision: Vec~Box~dyn Estimator~~
+    - recall: Vec~Box~dyn Estimator~~
+    - num_classes: usize
+    - weight_correct_no_change: Box~dyn Estimator~
+    - weight_majority: Box~dyn Estimator~
+    - last_true_class: usize
+    - total_weight: f64
+
+    + new(num_classes: usize) BasicClassificationEvaluator
+  }
+
+  BasicClassificationEvaluator ..|> PerformanceEvaluator
+  PerformanceEvaluator ..> Measurement : produces

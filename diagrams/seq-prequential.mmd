@@ -1,0 +1,29 @@
+sequenceDiagram
+  participant PE as PrequentialEvaluator
+  participant ST as Stream
+  participant CL as Classifier
+  participant EV as PerformanceEvaluator
+
+  loop enquanto PE.processed < max_instances
+    PE->>ST: next_instance()
+    ST-->>PE: inst (DenseInstance)
+
+    PE->>CL: get_votes_for_instance(inst)
+    CL-->>PE: votes
+
+    PE->>EV: add_result(inst, votes)
+
+    PE->>CL: train_on_instance(inst)
+
+    alt processed % sample_frequency == 0
+        PE->>PE: curve.push(Snapshot)
+    end
+
+      alt processed % mem_check_frequency == 0
+        PE->>CL: get_model_measurements()
+        CL-->>PE: Vec<Measurement>
+        PE->>PE: ram_hours += …
+      end
+    end
+
+  PE->>PE: curve.export(path, fmt)

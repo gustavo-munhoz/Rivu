@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant HT as HoeffdingTree
+    participant LN as ActiveLearningNode
+    participant AO as AttributeClassObserver
+    participant SC as SplitCriterion
+
+    HT->>LN: learn_from_instance(inst)
+    loop atributos
+        LN->>AO: observe_attribute_class(value, class)
+    end
+
+    alt LN.weight_seen()-LN.weight_seen_at_last_split_eval >= grace_period
+        LN->>SC: best_split_suggestion(stats, att_idx…)
+        SC-->>LN: suggestion
+        alt suggestion.exists
+            LN->>HT: attempt_to_split(LN, suggestion)
+            HT->>LN: deactivate_learning_node(...)
+            HT->>HT: new_learning_node(...)
+        end
+        LN->>LN: weight_seen_at_last_split_eval = weight_seen()
+    end

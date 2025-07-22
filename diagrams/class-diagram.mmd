@@ -1,0 +1,374 @@
+---
+config:
+  theme: default
+  layout: elk
+---
+classDiagram
+
+  %% Instances
+  class InstanceHeader {
+    - relation_name: String
+    - attributes: Vec~Attribute~
+    - class_index: usize
+    - number_of_classes: usize
+
+    + new~S~(relation_name: S, attributes: Vec~Attribute~, class_index: usize) Result~InstanceHeader, Error~
+    + relation_name() &str
+    + number_of_attributes() usize
+    + attribute_at_index(attribute_index: usize) Option~&Attribute~
+    + index_of_attribute(attribute: Attribute) Option~usize~
+    + class_index() usize
+    + class_attribute() Attribute
+    + number_of_classes() usize
+  }
+  InstanceHeader ..|> Serializable
+  InstanceHeader "1" --* "many" Attribute : contains
+  note for InstanceHeader "S: Into<<x>String>"
+
+  class Instance {
+    <<interface>>
+    + weight() f64
+    + set_weight(new_value: f64) Result~&#40&#41, Error~
+
+    + number_of_attributes() usize
+    + value_at_index(attribute_index: usize) Option~f64~
+    + set_value_at_index(attribute_index: usize, new_value: f64) Result~&#40&#41, Error~
+    + is_missing_at_index(attribute_index: usize) bool
+
+    + attribute_at_index(attribute_index: usize) Option~&Attribute~
+    + index_of_attribute(attribute: Attribute) Option~usize~
+
+    + class_index() usize
+    + class_value() f64
+    + set_class_value(new_value: f64) Result~&#40&#41, Error~
+    + is_class_missing() bool
+    + number_of_classes() usize
+
+    + to_vec() Vec~f64~
+
+    + header() &InstanceHeader
+  }
+  Instance ..|> Clone
+  Instance ..|> Copy
+  Instance ..|> Display
+
+  class DenseInstance {
+    - header: &InstanceHeader
+    - values: Vec~f64~
+    - missing: BitVec
+    - weight: f64
+
+    + new(header: &InstanceHeader, values: Vec~f64~, weight: f64) Result~DenseInstance, Error~
+  }
+  DenseInstance ..|> Instance
+  DenseInstance "many" --o "1" InstanceHeader 
+
+
+  %% Attributes
+  class Attribute {
+    <<interface>>
+
+    + name() &str
+    + arff_representation() String
+  }
+  note for NumericAttribute "S: Into<<x>String>"
+  Attribute ..|> Serializable
+  Attribute ..|> Display
+
+  class NumericAttribute {
+    - name: String
+    + new~S~(name: S) Result~NumericAttribute, Error~
+  }
+  NumericAttribute ..|> Attribute
+
+  class NominalAttribute {
+    - name: String
+    - values: Vec~String~
+    - label_to_index: HashMap~String, usize~
+
+    + new~S~(name: S, values: Vec~String~) Result~NominalAttribute, Error~
+    + get_attribute_values() Vec~String~
+    + index_of_value_mut(v: &str) Option~usize~
+    + enumerate_values() Iterator~&str~
+  }
+  NominalAttribute ..|> Attribute
+  note for NominalAttribute "S: Into<<x>String>"
+
+  <<interface>> Serializable
+  <<interface>> Copy
+  <<interface>> Clone
+
+
+  class Stream {
+    <<interface>>
+    + header(): &InstanceHeader
+    + has_more_instances() bool
+    + next_instance() Option~Instance~
+    + restart() Result~&#40&#41, Error~
+  }
+  Stream "1" --o "1" InstanceHeader : uses
+  Stream ..> Instance : produces
+
+  class ArffFileStream {
+    - input: BufReader~File~
+    - header: InstanceHeader
+    - finished: bool
+    + new(path: PathBuf, class_index: usize) Result~ArffFileStream, Error~
+  }
+  ArffFileStream ..|> Stream
+
+  class SeaGenerator {
+    - rng: RngCore
+    - threshold: f64
+    - balance_classes: bool
+    - next_class_should_be_zero: bool
+    - noise_percentage: f32
+    - header: InstanceHeader
+    - max_instances: Option~usize~
+    - produced: usize
+
+    + new(threshold: f64, balance: bool, noise_percentage: f32, max_instances: Option~usize~, seed: u64) Result~SeaGenerator, Error~
+    + set_threshold(threshold: f64) Result~&#40&#41, Error~
+  }
+  SeaGenerator ..|> Stream
+  SeaGenerator "many" --o "1" InstanceHeader
+
+  class AgrawalGenerator {
+    - rng: RngCore
+    - function_id: u8
+    - balance_classes: bool
+    - next_class_should_be_zero: bool
+    - perturb_fraction: f64
+    - header: InstanceHeader
+    - max_instances: Option~usize~
+    - produced: usize
+
+    + new(function_id: u8, balance: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+  }
+  AgrawalGenerator ..|> Stream
+  AgrawalGenerator "many" --o "1" InstanceHeader
+
+  class AssetNegotiationGenerator {
+    - rng: RngCore
+    - function_id: u8
+    - noise_percentage: f32
+    - balance_classes: bool
+    - next_class_should_be_zero: bool
+    - header: InstanceHeader
+    - produced: usize
+
+    + new(function_id: u8, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+  }
+  AssetNegotiationGenerator ..|> Stream
+  AssetNegotiationGenerator "many" --o "1" InstanceHeader
+
+direction LR
+
+  class PerformanceEvaluator {
+    <<interface>>
+    + reset()
+    + add_result(example: &dyn Instance, class_votes: Vec~f64~)
+    + performance() Vec~Measurement~
+  }
+
+  class Measurement {
+    - name: String
+    - value: f64
+  }
+  Measurement ..|> Serializable
+
+  class Estimator {
+    <<interface>>
+    + add(v: f64)
+    + estimation() f64
+  }
+
+  class BasicEstimator {
+    - len: f64
+    - sum: f64
+    + add(v: f64)
+    + estimation() f64
+  }
+  BasicEstimator ..|> Estimator
+  BasicEstimator ..|> Serializable
+
+  class BasicClassificationEvaluator {
+    - weight_correct: Box~dyn Estimator~
+    - row_kappa: Vec~Box~dyn Estimator~~
+    - col_kappa: Vec~Box~dyn Estimator~~
+    - precision: Vec~Box~dyn Estimator~~
+    - recall: Vec~Box~dyn Estimator~~
+    - num_classes: usize
+    - weight_correct_no_change: Box~dyn Estimator~
+    - weight_majority: Box~dyn Estimator~
+    - last_true_class: usize
+    - total_weight: f64
+
+    + new(num_classes: usize) BasicClassificationEvaluator
+  }
+
+  BasicClassificationEvaluator ..|> PerformanceEvaluator
+  PerformanceEvaluator ..> Measurement : produces
+
+direction LR
+
+  class Classifier {
+    <<interface>>
+    + get_votes_for_instance(inst: Instance) Option~Vec~usize~~
+    + get_prediction_for_instance(inst: Instance) Option~Vec~usize~~
+    + set_model_context(header: InstanceHeader)
+    + train_on_instance(inst: Instance)
+    + get_model_measurements() Vec~Measurement~
+    + context_is_compatible(orig: InstanceHeader, new: InstanceHeader) bool
+  }
+
+  class AttributeClassObserver {
+    <<interface>>
+    + observe_attribute_class(att_val: usize, class_val: i32, weight: usize)
+    + probability_of_attribute_value_given_class(att_val: usize, class_val: i32) usize
+  }
+
+  class LearningNode {
+    <<interface>>
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+  }
+
+  class HoeffdingTree {
+    - tree_root: Node
+    - decision_node_count: i32
+    - split_confidence: usize
+    + new_learning_node(initial_class_observations: Vec~usize~) Node
+    + train_on_instance_impl(inst: Instance)
+    + hoeffding_bound(range: usize, confidence: usize, n: usize) usize
+    + attempt_to_split(node: ActiveLearningNode, parent: SplitNode, parent_idx: i32) Result~&#40&#41, Error~
+    + get_votes_for_instance(inst: Instance) Vec~usize~
+    + deactivate_learning_node(to_deactivate: ActiveLearningNode, parent: SplitNode, parent_branch: i32)
+    + new() HoeffdingTree
+  }
+
+  class NaiveBayes {
+    - observed_class_distribution: Vec~usize~
+    - attribute_observers: Vec~AttributeClassObserver~
+    + train_on_instance(inst: Instance)
+    + get_votes_for_instance(inst: Instance) Vec~usize~
+    + nb_prediction(inst: Instance, class_dist: Vec~usize~, observers: Vec~AttributeClassObserver~) Option~Vec~usize~~
+    + nb_prediction_log(inst: Instance, class_dist: Vec~usize~, obs1: Vec~AttributeClassObserver~, obs2: Vec~AttributeClassObserver~) Vec~usize~
+    + new() NaiveBayes
+  }
+
+  class Node {
+    - is_leaf: bool
+    - class_distribution: Vec~usize~
+    + weight_seen() usize
+    + is_leaf() bool
+    + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
+  }
+
+  class SplitNode {
+    - split_test: InstanceConditionalTest
+    - children: Vec~Node~
+    + set_child(idx: i32, child: Node)
+    + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
+  }
+
+  class ActiveLearningNode {
+    - weight_seen_at_last_split_eval: usize
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+  }
+
+  class InactiveLearningNode {
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+  }
+
+  class LearningNodeNB {
+    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+  }
+
+  class LearningNodeNBAdaptive {
+    - mc_correct_weight: usize
+    - nb_correct_weight: usize
+    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+  }
+
+  class InstanceConditionalTest {
+    + branch_for_instance(inst: Instance) Option~i32~
+  }
+
+  class FoundNode {
+    - node: Node
+    - parent: SplitNode
+    - parent_branch: i32
+  }
+
+  HoeffdingTree ..|> Classifier
+  NaiveBayes   ..|> Classifier
+
+  LearningNodeNB        ..|> ActiveLearningNode
+  LearningNodeNBAdaptive ..|> LearningNodeNB
+
+  ActiveLearningNode   ..|> LearningNode
+  InactiveLearningNode ..|> LearningNode
+  SplitNode            ..|> Node
+
+  HoeffdingTree --> Node
+  SplitNode     --> InstanceConditionalTest
+  FoundNode     --> Node
+  FoundNode     --> SplitNode
+  NaiveBayes    --> AttributeClassObserver
+
+direction LR 
+
+  class Snapshot {
+    + instances_seen: u64
+    + accuracy: f64
+    + kappa: f64
+    + ram_hours: f64
+    + seconds: f64
+  }
+  Snapshot ..|> Display
+
+  class LearningCurve {
+    - entries: Vec~Snapshot~
+    + push(snap: Snapshot)
+    + len() usize
+    + latest() Option~Snapshot~
+    + export(path, fmt: CurveFormat)
+  }
+
+  class CurveFormat {
+    <<enumeration>>
+    Csv
+    Tsv
+    Json
+  }
+
+  class PrequentialEvaluator {
+    - learner: Box~dyn Classifier~
+    - stream:  Box~dyn Stream~
+    - evaluator: Box~dyn PerformanceEvaluator~
+
+    - curve: LearningCurve
+
+    - max_instances: Option~u64~
+    - max_seconds: Option~u64~
+    - sample_frequency: u64
+    - mem_check_frequency: u64
+
+    - processed: u64
+    - start_time: Instant
+    - last_sample_time: Instant
+    - ram_hours: f64
+
+    + new(learner: Classifier, stream: Stream, evaluator: PrequentialEvaluator, max_instances: Option~u64~, max_seconds: Option~u64~, sample_frequency: u64, mem_check_frequency: u64) Result~PrequentialEvaluator, Error~
+    + run()
+    + curve() &LearningCurve
+  }
+
+  PrequentialEvaluator ..> Stream                : pulls
+  PrequentialEvaluator ..> Classifier           : tests/trains
+  PrequentialEvaluator ..> PerformanceEvaluator : feeds
+  PrequentialEvaluator "1" --* "1" LearningCurve : builds
+  LearningCurve "many" --* "1" Snapshot         : contains
+  LearningCurve ..> CurveFormat                 : export
+

@@ -1,0 +1,94 @@
+classDiagram
+
+  %% Instances
+  class InstanceHeader {
+    - relation_name: String
+    - attributes: Vec~Attribute~
+    - class_index: usize
+    - number_of_classes: usize
+
+    + new~S~(relation_name: S, attributes: Vec~Attribute~, class_index: usize) Result~InstanceHeader, Error~
+    + relation_name() &str
+    + number_of_attributes() usize
+    + attribute_at_index(attribute_index: usize) Option~&Attribute~
+    + index_of_attribute(attribute: Attribute) Option~usize~
+    + class_index() usize
+    + class_attribute() Attribute
+    + number_of_classes() usize
+  }
+  InstanceHeader ..|> Serializable
+  InstanceHeader "1" --* "many" Attribute : contains
+  note for InstanceHeader "S: Into<<x>String>"
+
+  class Instance {
+    <<interface>>
+    + weight() f64
+    + set_weight(new_value: f64) Result~&#40&#41, Error~
+
+    + number_of_attributes() usize
+    + value_at_index(attribute_index: usize) Option~f64~
+    + set_value_at_index(attribute_index: usize, new_value: f64) Result~&#40&#41, Error~
+    + is_missing_at_index(attribute_index: usize) bool
+
+    + attribute_at_index(attribute_index: usize) Option~&Attribute~
+    + index_of_attribute(attribute: Attribute) Option~usize~
+
+    + class_index() usize
+    + class_value() f64
+    + set_class_value(new_value: f64) Result~&#40&#41, Error~
+    + is_class_missing() bool
+    + number_of_classes() usize
+
+    + to_vec() Vec~f64~
+
+    + header() &InstanceHeader
+  }
+  Instance ..|> Clone
+  Instance ..|> Copy
+  Instance ..|> Display
+
+  class DenseInstance {
+    - header: &InstanceHeader
+    - values: Vec~f64~
+    - missing: BitVec
+    - weight: f64
+
+    + new(header: &InstanceHeader, values: Vec~f64~, weight: f64) Result~DenseInstance, Error~
+  }
+  DenseInstance ..|> Instance
+  DenseInstance "many" --o "1" InstanceHeader 
+
+
+  %% Attributes
+  class Attribute {
+    <<interface>>
+
+    + name() &str
+    + arff_representation() String
+  }
+  note for NumericAttribute "S: Into<<x>String>"
+  Attribute ..|> Serializable
+  Attribute ..|> Display
+
+  class NumericAttribute {
+    - name: String
+    + new~S~(name: S) Result~NumericAttribute, Error~
+  }
+  NumericAttribute ..|> Attribute
+
+  class NominalAttribute {
+    - name: String
+    - values: Vec~String~
+    - label_to_index: HashMap~String, usize~
+
+    + new~S~(name: S, values: Vec~String~) Result~NominalAttribute, Error~
+    + get_attribute_values() Vec~String~
+    + index_of_value_mut(v: &str) Option~usize~
+    + enumerate_values() Iterator~&str~
+  }
+  NominalAttribute ..|> Attribute
+  note for NominalAttribute "S: Into<<x>String>"
+
+  <<interface>> Serializable
+  <<interface>> Copy
+  <<interface>> Clone

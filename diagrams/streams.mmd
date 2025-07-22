@@ -1,0 +1,64 @@
+classDiagram
+
+  class Stream {
+    <<interface>>
+    + header(): &InstanceHeader
+    + has_more_instances() bool
+    + next_instance() Option~Instance~
+    + restart() Result~&#40&#41, Error~
+  }
+  Stream "1" --o "1" InstanceHeader : uses
+  Stream ..> Instance : produces
+
+  class ArffFileStream {
+    - input: BufReader~File~
+    - header: InstanceHeader
+    - finished: bool
+    + new(path: PathBuf, class_index: usize) Result~ArffFileStream, Error~
+  }
+  ArffFileStream ..|> Stream
+
+  class SeaGenerator {
+    - rng: RngCore
+    - threshold: f64
+    - balance_classes: bool
+    - next_class_should_be_zero: bool
+    - noise_percentage: f32
+    - header: InstanceHeader
+    - max_instances: Option~usize~
+    - produced: usize
+
+    + new(threshold: f64, balance: bool, noise_percentage: f32, max_instances: Option~usize~, seed: u64) Result~SeaGenerator, Error~
+    + set_threshold(threshold: f64) Result~&#40&#41, Error~
+  }
+  SeaGenerator ..|> Stream
+  SeaGenerator "many" --o "1" InstanceHeader
+
+  class AgrawalGenerator {
+    - rng: RngCore
+    - function_id: u8
+    - balance_classes: bool
+    - next_class_should_be_zero: bool
+    - perturb_fraction: f64
+    - header: InstanceHeader
+    - max_instances: Option~usize~
+    - produced: usize
+
+    + new(function_id: u8, balance: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+  }
+  AgrawalGenerator ..|> Stream
+  AgrawalGenerator "many" --o "1" InstanceHeader
+
+  class AssetNegotiationGenerator {
+    - rng: RngCore
+    - function_id: u8
+    - noise_percentage: f32
+    - balance_classes: bool
+    - next_class_should_be_zero: bool
+    - header: InstanceHeader
+    - produced: usize
+
+    + new(function_id: u8, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+  }
+  AssetNegotiationGenerator ..|> Stream
+  AssetNegotiationGenerator "many" --o "1" InstanceHeader
