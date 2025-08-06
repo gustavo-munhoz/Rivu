@@ -1,11 +1,33 @@
+use crate::attribute::{Attribute, NominalAttribute, NumericAttribute};
 use crate::instance_header::InstanceHeader;
+use std::io::Error;
 
-pub trait Instance{
+pub trait Instance {
     fn weight(&self) -> f64;
+
+    fn set_weight(&mut self, new_value: f64) -> Result<(), Error>;
 
     fn value_at_index(&self, index: usize) -> Option<f64>;
 
+    fn set_value_at_index(&mut self, index: usize, new_value: f64) -> Result<(), Error>;
+
+    fn is_missing_at_index(&self, index: usize) -> Result<bool, Error>;
+
+    fn attribute_at_index(&self, index: usize) -> Option<&dyn Attribute>;
+
+    fn index_of_attribute(&self, attribute: &dyn Attribute) -> Option<usize>;
+
+    fn class_index(&self) -> usize;
+
     fn class_value(&self) -> Option<f64>;
+
+    fn set_class_value(&mut self, new_value: f64) -> Result<(), Error>;
+
+    fn is_class_missing(&self) -> bool;
+
+    fn number_of_classes(&self) -> usize;
+
+    fn to_vec(&self) -> Vec<f64>;
 
     fn header(&self) -> &InstanceHeader;
 }
@@ -18,13 +40,29 @@ pub struct DenseInstance {
 
 impl DenseInstance {
     pub fn new(header: &'static InstanceHeader, values: Vec<f64>, weight: f64) -> DenseInstance {
-        DenseInstance { header, values, weight }
+        DenseInstance {
+            header,
+            values,
+            weight,
+        }
     }
 }
 
 impl Instance for DenseInstance {
     fn weight(&self) -> f64 {
         self.weight
+    }
+
+    fn set_weight(&mut self, new_value: f64) -> Result<(), Error> {
+        if new_value < 0.0 {
+            Err(Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Weight cannot be negative",
+            ))
+        } else {
+            self.weight = new_value;
+            Ok(())
+        }
     }
 
     fn value_at_index(&self, index: usize) -> Option<f64> {
@@ -35,12 +73,89 @@ impl Instance for DenseInstance {
         }
     }
 
+    fn set_value_at_index(&mut self, index: usize, new_value: f64) -> Result<(), Error> {
+        if index < self.values.len() {
+            self.values[index] = new_value;
+            Ok(())
+        } else {
+            Err(Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Index out of bounds",
+            ))
+        }
+    }
+
+    fn is_missing_at_index(&self, index: usize) -> Result<bool, Error> {
+        if index < self.values.len() {
+            Ok(self.values[index].is_nan())
+        } else {
+            Err(Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Index out of bounds",
+            ))
+        }
+    }
+
+    fn attribute_at_index(&self, index: usize) -> Option<&dyn Attribute> {
+        if index < self.header.attributes.len() {
+            Some(&*self.header.attributes[index])
+        } else {
+            None
+        }
+    }
+
+    fn index_of_attribute(&self, attribute: &dyn Attribute) -> Option<usize> {
+        self.header
+            .attributes
+            .iter()
+            .position(|attr| attr.name() == attribute.name())
+    }
+
+    fn class_index(&self) -> usize {
+        self.header.class_index
+    }
+
     fn class_value(&self) -> Option<f64> {
         if self.header.class_index < self.values.len() {
             Some(self.values[self.header.class_index])
         } else {
             None
         }
+    }
+
+    fn set_class_value(&mut self, new_value: f64) -> Result<(), Error> {
+        if self.header.class_index < self.values.len() {
+            self.values[self.header.class_index] = new_value;
+            Ok(())
+        } else {
+            Err(Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Class index out of bounds",
+            ))
+        }
+    }
+
+    fn is_class_missing(&self) -> bool {
+        if self.header.class_index < self.values.len() {
+            self.values[self.header.class_index].is_nan()
+        } else {
+            false
+        }
+    }
+
+    fn number_of_classes(&self) -> usize {
+        let attr = &*self.header.attributes[self.class_index()];
+        if attr.as_any().is::<NumericAttribute>() {
+            0
+        } else if let Some(nominal) = attr.as_any().downcast_ref::<NominalAttribute>() {
+            nominal.values.len()
+        } else {
+            0
+        }
+    }
+
+    fn to_vec(&self) -> Vec<f64> {
+        self.values.clone()
     }
 
     fn header(&self) -> &InstanceHeader {
