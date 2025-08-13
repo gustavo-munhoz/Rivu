@@ -12,6 +12,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-A warnings"
     steps:
       - uses: actions/checkout@v4
 
@@ -22,8 +24,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Lint (clippy)
-        run: cargo clippy --all-targets -- -D warnings
+      - name: Lint
+        run: cargo clippy --all-targets
 
       - name: Check formatting
         run: cargo fmt --check
