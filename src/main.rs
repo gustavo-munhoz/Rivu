@@ -1,7 +1,6 @@
-mod attribute;
-mod instance;
-mod instance_header;
-mod stream;
+mod core;
+mod streams;
+mod utils;
 
 fn main() {
     println!("Hello, world!");

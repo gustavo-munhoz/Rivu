@@ -1,5 +1,5 @@
-use crate::instance::Instance;
-use crate::instance_header::InstanceHeader;
+use crate::core::instance_header::InstanceHeader;
+use crate::core::instances::instance::Instance;
 use std::io::Error;
 
 pub trait Stream {
