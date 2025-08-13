@@ -1,15 +1,16 @@
-use crate::attribute::Attribute;
+use crate::core::attributes::{Attribute, AttributeRef, NominalAttribute};
+use std::fmt;
 
 pub struct InstanceHeader {
     pub relation_name: String,
-    pub attributes: Vec<Box<dyn Attribute>>,
+    pub attributes: Vec<AttributeRef>,
     pub class_index: usize,
 }
 
 impl InstanceHeader {
     pub fn new(
         relation_name: String,
-        attributes: Vec<Box<dyn Attribute>>,
+        attributes: Vec<AttributeRef>,
         class_index: usize,
     ) -> InstanceHeader {
         InstanceHeader {
@@ -56,11 +57,21 @@ impl InstanceHeader {
         if self.class_index < self.attributes.len() {
             if let Some(nominal_attr) = self.attributes[self.class_index]
                 .as_any()
-                .downcast_ref::<crate::attribute::NominalAttribute>()
+                .downcast_ref::<NominalAttribute>()
             {
                 return nominal_attr.values.len();
             }
         }
         0
+    }
+}
+
+impl fmt::Debug for InstanceHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InstanceHeader")
+            .field("relation_name", &self.relation_name)
+            .field("class_index", &self.class_index)
+            .field("n_attributes", &self.attributes.len())
+            .finish()
     }
 }

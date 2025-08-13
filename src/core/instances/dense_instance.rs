@@ -1,45 +1,17 @@
-use crate::attribute::{Attribute, NominalAttribute, NumericAttribute};
-use crate::instance_header::InstanceHeader;
+use crate::core::attributes::{Attribute, NominalAttribute, NumericAttribute};
+use crate::core::instance_header::InstanceHeader;
+use crate::core::instances::instance::Instance;
 use std::io::Error;
-
-pub trait Instance {
-    fn weight(&self) -> f64;
-
-    fn set_weight(&mut self, new_value: f64) -> Result<(), Error>;
-
-    fn value_at_index(&self, index: usize) -> Option<f64>;
-
-    fn set_value_at_index(&mut self, index: usize, new_value: f64) -> Result<(), Error>;
-
-    fn is_missing_at_index(&self, index: usize) -> Result<bool, Error>;
-
-    fn attribute_at_index(&self, index: usize) -> Option<&dyn Attribute>;
-
-    fn index_of_attribute(&self, attribute: &dyn Attribute) -> Option<usize>;
-
-    fn class_index(&self) -> usize;
-
-    fn class_value(&self) -> Option<f64>;
-
-    fn set_class_value(&mut self, new_value: f64) -> Result<(), Error>;
-
-    fn is_class_missing(&self) -> bool;
-
-    fn number_of_classes(&self) -> usize;
-
-    fn to_vec(&self) -> Vec<f64>;
-
-    fn header(&self) -> &InstanceHeader;
-}
+use std::sync::Arc;
 
 pub struct DenseInstance {
-    pub header: &'static InstanceHeader,
+    pub header: Arc<InstanceHeader>,
     pub values: Vec<f64>,
     pub weight: f64,
 }
 
 impl DenseInstance {
-    pub fn new(header: &'static InstanceHeader, values: Vec<f64>, weight: f64) -> DenseInstance {
+    pub fn new(header: Arc<InstanceHeader>, values: Vec<f64>, weight: f64) -> DenseInstance {
         DenseInstance {
             header,
             values,
@@ -159,6 +131,6 @@ impl Instance for DenseInstance {
     }
 
     fn header(&self) -> &InstanceHeader {
-        self.header
+        &self.header
     }
 }
