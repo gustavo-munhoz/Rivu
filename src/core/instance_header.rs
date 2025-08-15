@@ -49,11 +49,11 @@ impl InstanceHeader {
         None
     }
 
-    fn class_index(&self) -> usize {
+    pub fn class_index(&self) -> usize {
         self.class_index
     }
 
-    fn number_of_classes(&self) -> usize {
+    pub fn number_of_classes(&self) -> usize {
         if self.class_index < self.attributes.len() {
             if let Some(nominal_attr) = self.attributes[self.class_index]
                 .as_any()
