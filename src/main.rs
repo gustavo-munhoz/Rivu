@@ -1,3 +1,4 @@
+mod classifiers;
 mod core;
 mod streams;
 mod utils;
