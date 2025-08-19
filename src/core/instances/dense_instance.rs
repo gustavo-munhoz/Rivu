@@ -83,6 +83,10 @@ impl Instance for DenseInstance {
             .position(|attr| attr.name() == attribute.name())
     }
 
+    fn number_of_attributes(&self) -> usize {
+        self.header.attributes.len()
+    }
+
     fn class_index(&self) -> usize {
         self.header.class_index
     }

@@ -1,3 +1,6 @@
-mod attribute_class_observer;
-mod gaussian_numeric_attribute_class_observer;
-mod nominal_attribute_class_observer;
+pub use attribute_class_observer::AttributeClassObserver;
+pub use gaussian_numeric_attribute_class_observer::GaussianNumericAttributeClassObserver;
+pub use nominal_attribute_class_observer::NominalAttributeClassObserver;
+pub mod attribute_class_observer;
+pub mod gaussian_numeric_attribute_class_observer;
+pub mod nominal_attribute_class_observer;
