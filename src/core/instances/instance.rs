@@ -17,6 +17,8 @@ pub trait Instance {
 
     fn index_of_attribute(&self, attribute: &dyn Attribute) -> Option<usize>;
 
+    fn number_of_attributes(&self) -> usize;
+
     fn class_index(&self) -> usize;
 
     fn class_value(&self) -> Option<f64>;
