@@ -8,32 +8,14 @@ use rand::{Rng, SeedableRng};
 use crate::core::attributes::{AttributeRef, NominalAttribute, NumericAttribute};
 use crate::core::instance_header::InstanceHeader;
 use crate::core::instances::{DenseInstance, Instance};
+use crate::streams::generators::sea::SeaFunction;
 use crate::streams::stream::Stream;
-
-#[derive(Clone, Copy, Debug)]
-pub enum SeaFunction {
-    F1 = 1,
-    F2 = 2,
-    F3 = 3,
-    F4 = 4,
-}
-
-impl SeaFunction {
-    fn threshold(self) -> f64 {
-        match self {
-            SeaFunction::F1 => 8.0,
-            SeaFunction::F2 => 9.0,
-            SeaFunction::F3 => 7.0,
-            SeaFunction::F4 => 9.5,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct SeaGenerator {
     seed: u64,
     rng: StdRng,
-    func: SeaFunction,
+    function: SeaFunction,
     threshold: f64,
     balance_classes: bool,
     next_class_should_be_zero: bool,
@@ -44,8 +26,8 @@ pub struct SeaGenerator {
 }
 
 impl SeaGenerator {
-    pub fn new_by_function(
-        func: SeaFunction,
+    pub fn new(
+        function: SeaFunction,
         balance: bool,
         noise_percentage: u32,
         max_instances: Option<usize>,
@@ -76,8 +58,8 @@ impl SeaGenerator {
         Ok(Self {
             seed,
             rng: StdRng::seed_from_u64(seed),
-            func,
-            threshold: func.threshold(),
+            function,
+            threshold: function.threshold(),
             balance_classes: balance,
             next_class_should_be_zero: false,
             noise_percentage,
@@ -106,7 +88,7 @@ impl SeaGenerator {
                 "Noise percentage must be in [0, 100]",
             ));
         }
-        Self::new_by_function(
+        Self::new(
             SeaFunction::F2,
             balance,
             noise_percentage,
@@ -205,8 +187,7 @@ mod tests {
 
     #[test]
     fn header_shape_and_labels_match_moa() {
-        let generator =
-            SeaGenerator::new_by_function(SeaFunction::F1, false, 0, Some(1), 42).unwrap();
+        let generator = SeaGenerator::new(SeaFunction::F1, false, 0, Some(1), 42).unwrap();
         let h = generator.header();
         assert_eq!(h.number_of_attributes(), 4);
         assert_eq!(h.class_index(), 3);
@@ -232,8 +213,7 @@ mod tests {
     #[test]
     fn class_rule_matches_threshold_f1_no_noise_no_balance() {
         let threshold = SeaFunction::F1.threshold();
-        let mut generator =
-            SeaGenerator::new_by_function(SeaFunction::F1, false, 0, Some(500), 123).unwrap();
+        let mut generator = SeaGenerator::new(SeaFunction::F1, false, 0, Some(500), 123).unwrap();
         for _ in 0..200 {
             let inst = generator.next_instance().unwrap();
             let v = inst.to_vec();
@@ -251,9 +231,8 @@ mod tests {
     }
 
     #[test]
-    fn balance_true_alternates_classes_starting_with_one_like_moa() {
-        let mut generator =
-            SeaGenerator::new_by_function(SeaFunction::F2, true, 0, Some(20), 7).unwrap();
+    fn balance_true_alternates_classes_starting_with_one() {
+        let mut generator = SeaGenerator::new(SeaFunction::F2, true, 0, Some(20), 7).unwrap();
         let got = classes_from(&mut generator, 10);
         let expected: Vec<u8> = (0..10).map(|i| if i % 2 == 0 { 1 } else { 0 }).collect();
         assert_eq!(got, expected);
@@ -273,8 +252,7 @@ mod tests {
 
     #[test]
     fn restart_resets_sequence_with_same_seed() {
-        let mut generator =
-            SeaGenerator::new_by_function(SeaFunction::F3, true, 10, Some(100), 12345).unwrap();
+        let mut generator = SeaGenerator::new(SeaFunction::F3, true, 10, Some(100), 12345).unwrap();
         let first: Vec<Vec<f64>> = (0..30)
             .map(|_| generator.next_instance().unwrap().to_vec())
             .collect();
@@ -288,7 +266,7 @@ mod tests {
     #[test]
     fn invalid_parameters_are_rejected() {
         // noise > 100
-        let err = SeaGenerator::new_by_function(SeaFunction::F1, false, 101, None, 1).unwrap_err();
+        let err = SeaGenerator::new(SeaFunction::F1, false, 101, None, 1).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
 
         let err = SeaGenerator::new_with_threshold(-0.1, false, 0, None, 1).unwrap_err();
@@ -307,8 +285,7 @@ mod tests {
             (SeaFunction::F4, 9.5),
         ];
         for (f, thr) in cases {
-            let mut generator =
-                SeaGenerator::new_by_function(f, false, 0, Some(200), 2025).unwrap();
+            let mut generator = SeaGenerator::new(f, false, 0, Some(200), 2025).unwrap();
             for _ in 0..50 {
                 let inst = generator.next_instance().unwrap();
                 let v = inst.to_vec();

@@ -178,7 +178,7 @@ pub(super) static CLASS_RULES: [ClassFn; 10] = [
 
 pub(super) fn determine(function_id: u8, a: &RawAttrs) -> u8 {
     if !(1..=10).contains(&function_id) {
-        panic!("function_id inválido: {}", function_id);
+        panic!("invalid function_id: {}", function_id);
     }
     CLASS_RULES[(function_id - 1) as usize](a)
 }

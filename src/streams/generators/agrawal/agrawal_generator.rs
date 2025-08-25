@@ -1,6 +1,7 @@
 use crate::core::attributes::{AttributeRef, NominalAttribute, NumericAttribute};
 use crate::core::instance_header::InstanceHeader;
 use crate::core::instances::{DenseInstance, Instance};
+use crate::streams::generators::agrawal::function::AgrawalFunction;
 use crate::streams::generators::agrawal::rules::{RawAttrs, determine};
 use crate::streams::stream::Stream;
 use rand::rngs::StdRng;
@@ -10,48 +11,10 @@ use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub enum AgrawalFunction {
-    F1 = 1,
-    F2,
-    F3,
-    F4,
-    F5,
-    F6,
-    F7,
-    F8,
-    F9,
-    F10,
-}
-
-impl AgrawalFunction {
-    pub fn from_id(id: u8) -> Result<Self, Error> {
-        use AgrawalFunction::*;
-        Ok(match id {
-            1 => F1,
-            2 => F2,
-            3 => F3,
-            4 => F4,
-            5 => F5,
-            6 => F6,
-            7 => F7,
-            8 => F8,
-            9 => F9,
-            10 => F10,
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "function_id must be 1..10",
-                ));
-            }
-        })
-    }
-}
-
-#[derive(Debug)]
 pub struct AgrawalGenerator {
     seed: u64,
     rng: StdRng,
-    function_id: u8,
+    function: AgrawalFunction,
     balance_classes: bool,
     next_class_should_be_zero: bool,
     perturb_fraction: f64,
@@ -62,39 +25,46 @@ pub struct AgrawalGenerator {
 
 impl AgrawalGenerator {
     pub fn new(
-        function_id: u8,
+        function: AgrawalFunction,
         balance_classes: bool,
         perturb_fraction: f64,
         max_instances: Option<usize>,
         seed: u64,
     ) -> Result<Self, Error> {
-        if !(1..=10).contains(&function_id) {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "function_id must be in 1..=10",
-            ));
-        }
         if !(0.0..=1.0).contains(&perturb_fraction) {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "perturb_fraction must be in 0.0..=1.0",
             ));
         }
-
-        let rng = StdRng::seed_from_u64(seed);
-        let header = Arc::new(build_agrawal_header());
-
         Ok(Self {
             seed,
-            rng,
-            function_id,
+            rng: StdRng::seed_from_u64(seed),
+            function,
             balance_classes,
             next_class_should_be_zero: false,
             perturb_fraction,
-            header,
+            header: Arc::new(build_agrawal_header()),
             max_instances,
             produced: 0,
         })
+    }
+
+    pub fn new_with_id(
+        function_id: u8,
+        balance_classes: bool,
+        perturb_fraction: f64,
+        max_instances: Option<usize>,
+        seed: u64,
+    ) -> Result<Self, Error> {
+        let function = AgrawalFunction::try_from(function_id)?;
+        Self::new(
+            function,
+            balance_classes,
+            perturb_fraction,
+            max_instances,
+            seed,
+        )
     }
 
     fn sample_raw_attributes<R: Rng + ?Sized>(rng: &mut R) -> RawAttrs {
@@ -168,7 +138,7 @@ impl AgrawalGenerator {
     }
 
     fn determine_class(&self, a: &RawAttrs) -> i32 {
-        determine(self.function_id, a) as i32
+        determine(self.function.as_u8(), a) as i32
     }
 }
 
@@ -301,23 +271,23 @@ mod tests {
 
     #[test]
     fn new_rejects_invalid_function_id() {
-        let err = AgrawalGenerator::new(0, false, 0.0, None, 1).unwrap_err();
+        let err = AgrawalGenerator::new_with_id(0, false, 0.0, None, 1).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
-        let err = AgrawalGenerator::new(11, false, 0.0, None, 1).unwrap_err();
+        let err = AgrawalGenerator::new_with_id(11, false, 0.0, None, 1).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
     }
 
     #[test]
-    fn new_rejects_invalid_perturb_fraction() {
-        let err = AgrawalGenerator::new(1, false, -0.01, None, 1).unwrap_err();
+    fn new_with_id_rejects_invalid_perturb_fraction() {
+        let err = AgrawalGenerator::new_with_id(1, false, -0.01, None, 1).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
-        let err = AgrawalGenerator::new(1, false, 1.01, None, 1).unwrap_err();
+        let err = AgrawalGenerator::new_with_id(1, false, 1.01, None, 1).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
     }
 
     #[test]
     fn header_shape_and_nominals() {
-        let g = AgrawalGenerator::new(1, false, 0.0, Some(1), 42).unwrap();
+        let g = AgrawalGenerator::new_with_id(1, false, 0.0, Some(1), 42).unwrap();
         let h = g.header();
         assert_eq!(h.number_of_attributes(), 10);
         assert_eq!(h.class_index(), 9);
@@ -368,7 +338,7 @@ mod tests {
 
     #[test]
     fn max_instances_and_has_more_instances() {
-        let mut g = AgrawalGenerator::new(7, false, 0.0, Some(3), 123).unwrap();
+        let mut g = AgrawalGenerator::new_with_id(7, false, 0.0, Some(3), 123).unwrap();
         assert!(g.has_more_instances());
         assert!(g.next_instance().is_some());
         assert!(g.next_instance().is_some());
@@ -379,7 +349,7 @@ mod tests {
 
     #[test]
     fn balance_alternates_starting_with_one_like_moa() {
-        let mut g = AgrawalGenerator::new(1, true, 0.0, Some(10), 7).unwrap();
+        let mut g = AgrawalGenerator::new_with_id(1, true, 0.0, Some(10), 7).unwrap();
         let mut classes = Vec::new();
         for _ in 0..10 {
             let inst = g.next_instance().unwrap();
@@ -397,7 +367,7 @@ mod tests {
 
     #[test]
     fn restart_reproducible_sequence() {
-        let mut g = AgrawalGenerator::new(9, false, 0.0, Some(20), 2024).unwrap();
+        let mut g = AgrawalGenerator::new_with_id(9, false, 0.0, Some(20), 2024).unwrap();
         let a1 = g.next_instance().unwrap().to_vec();
         let a2 = g.next_instance().unwrap().to_vec();
         g.restart().unwrap();
@@ -409,8 +379,8 @@ mod tests {
 
     #[test]
     fn perturbation_changes_numerics_when_p_is_one() {
-        let mut g0 = AgrawalGenerator::new(10, false, 0.0, Some(1), 77).unwrap();
-        let mut g1 = AgrawalGenerator::new(10, false, 1.0, Some(1), 77).unwrap();
+        let mut g0 = AgrawalGenerator::new_with_id(10, false, 0.0, Some(1), 77).unwrap();
+        let mut g1 = AgrawalGenerator::new_with_id(10, false, 1.0, Some(1), 77).unwrap();
 
         let v0 = g0.next_instance().unwrap().to_vec();
         let v1 = g1.next_instance().unwrap().to_vec();
@@ -429,7 +399,7 @@ mod tests {
 
     #[test]
     fn sampler_hits_both_commission_branches_with_fixed_seed() {
-        let mut g = AgrawalGenerator::new(6, false, 0.0, Some(300), 424242).unwrap();
+        let mut g = AgrawalGenerator::new_with_id(6, false, 0.0, Some(300), 424242).unwrap();
         let mut saw_zero = false;
         let mut saw_nonzero = false;
         for _ in 0..300 {
@@ -455,13 +425,13 @@ mod tests {
     #[test]
     fn agrawal_function_from_id_ok_and_err() {
         for id in 1u8..=10u8 {
-            let f = AgrawalFunction::from_id(id).unwrap();
+            let f = AgrawalFunction::try_from(id).unwrap();
             let v = f as u8;
             assert_eq!(v, id);
         }
-        let err = AgrawalFunction::from_id(0).unwrap_err();
+        let err = AgrawalFunction::try_from(0).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
-        let err = AgrawalFunction::from_id(11).unwrap_err();
+        let err = AgrawalFunction::try_from(11).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidInput);
     }
 }

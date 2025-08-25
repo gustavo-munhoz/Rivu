@@ -1,3 +1,4 @@
+pub mod function;
 pub mod sea_generator;
-
-pub use sea_generator::{SeaFunction, SeaGenerator};
+pub use function::SeaFunction;
+pub use sea_generator::SeaGenerator;
