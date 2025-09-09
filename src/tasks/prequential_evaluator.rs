@@ -97,10 +97,7 @@ impl PrequentialEvaluator {
             };
             self.processed += 1;
 
-            let votes = self
-                .learner
-                .get_votes_for_instance(&*instance)
-                .unwrap_or_default();
+            let votes = self.learner.get_votes_for_instance(&*instance);
 
             self.evaluator.add_result(&*instance, votes);
 

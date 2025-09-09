@@ -1,3 +1,7 @@
+pub use instance_conditional_test::InstanceConditionalTest;
+pub use nominal_attribute_binary_test::NominalAttributeBinaryTest;
+pub use nominal_attribute_multiway_test::NominalAttributeMultiwayTest;
+pub use numeric_attribute_binary_test::NumericAttributeBinaryTest;
 mod instance_conditional_test;
 mod nominal_attribute_binary_test;
 mod nominal_attribute_multiway_test;

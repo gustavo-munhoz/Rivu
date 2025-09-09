@@ -2,7 +2,7 @@ use crate::classifiers::hoeffding_tree::instance_conditional_test::instance_cond
 use crate::core::instances::Instance;
 use std::sync::Arc;
 
-struct NumericAttributeBinaryTest {
+pub struct NumericAttributeBinaryTest {
     attribute_index: usize,
     attribute_value: usize,
     equals_passes_test: bool,
