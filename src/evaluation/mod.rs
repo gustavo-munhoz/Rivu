@@ -1,7 +1,10 @@
 mod estimators;
 mod evaluators;
 mod measurement;
+mod preview;
 
 pub use estimators::{BasicEstimator, Estimator};
-pub use evaluators::PerformanceEvaluator;
+pub use evaluators::{BasicClassificationEvaluator, PerformanceEvaluator, PerformanceEvaluatorExt};
 pub use measurement::Measurement;
+pub use preview::learning_curve::LearningCurve;
+pub use preview::snapshot::Snapshot;

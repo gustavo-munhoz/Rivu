@@ -88,20 +88,20 @@ impl Instance for DenseInstance {
     }
 
     fn class_index(&self) -> usize {
-        self.header.class_index
+        self.header.class_index()
     }
 
     fn class_value(&self) -> Option<f64> {
-        if self.header.class_index < self.values.len() {
-            Some(self.values[self.header.class_index])
+        if self.header.class_index() < self.values.len() {
+            Some(self.values[self.header.class_index()])
         } else {
             None
         }
     }
 
     fn set_class_value(&mut self, new_value: f64) -> Result<(), Error> {
-        if self.header.class_index < self.values.len() {
-            self.values[self.header.class_index] = new_value;
+        if self.header.class_index() < self.values.len() {
+            self.values[self.header.class_index()] = new_value;
             Ok(())
         } else {
             Err(Error::new(
@@ -112,8 +112,8 @@ impl Instance for DenseInstance {
     }
 
     fn is_class_missing(&self) -> bool {
-        if self.header.class_index < self.values.len() {
-            self.values[self.header.class_index].is_nan()
+        if self.header.class_index() < self.values.len() {
+            self.values[self.header.class_index()].is_nan()
         } else {
             false
         }

@@ -51,7 +51,7 @@ impl NaiveBayes {
 }
 
 impl Classifier for NaiveBayes {
-    fn get_votes_for_instance(&self, instance: Box<dyn Instance>) -> Option<Vec<f64>> {
+    fn get_votes_for_instance(&self, instance: &dyn Instance) -> Option<Vec<f64>> {
         let mut votes = vec![0.0; self.observed_class_distribution.len()];
         let observed_class_sum: f64 = self.observed_class_distribution.iter().copied().sum();
 
@@ -183,17 +183,17 @@ mod tests {
     }
 
     impl Instance for TestInstance {
-        fn number_of_attributes(&self) -> usize {
-            self.values.len()
-        }
-        fn class_index(&self) -> usize {
-            self.class_idx
-        }
         fn weight(&self) -> f64 {
             self.weight
         }
-        fn class_value(&self) -> Option<f64> {
-            self.class_val
+        fn set_weight(&mut self, _new_value: f64) -> Result<(), Error> {
+            unimplemented!()
+        }
+        fn value_at_index(&self, index: usize) -> Option<f64> {
+            self.values.get(index).copied()
+        }
+        fn set_value_at_index(&mut self, _index: usize, _new_value: f64) -> Result<(), Error> {
+            unimplemented!()
         }
         fn is_missing_at_index(&self, index: usize) -> Result<bool, Error> {
             if index < self.values.len() {
@@ -202,44 +202,44 @@ mod tests {
                 Err(Error::new(std::io::ErrorKind::InvalidInput, "oob"))
             }
         }
-        fn value_at_index(&self, index: usize) -> Option<f64> {
-            self.values.get(index).copied()
+        fn attribute_at_index(&self, _index: usize) -> Option<&dyn Attribute> {
+            unimplemented!()
         }
 
-        fn set_weight(&mut self, new_value: f64) -> Result<(), Error> {
-            panic!("not implemented")
+        fn index_of_attribute(&self, _attribute: &dyn Attribute) -> Option<usize> {
+            unimplemented!()
         }
 
-        fn set_value_at_index(&mut self, index: usize, new_value: f64) -> Result<(), Error> {
-            panic!("not implemented")
+        fn number_of_attributes(&self) -> usize {
+            self.values.len()
         }
 
-        fn attribute_at_index(&self, index: usize) -> Option<&dyn Attribute> {
-            panic!("not implemented")
+        fn class_index(&self) -> usize {
+            self.class_idx
         }
 
-        fn index_of_attribute(&self, attribute: &dyn Attribute) -> Option<usize> {
-            panic!("not implemented")
+        fn class_value(&self) -> Option<f64> {
+            self.class_val
         }
 
-        fn set_class_value(&mut self, new_value: f64) -> Result<(), Error> {
-            panic!("not implemented")
+        fn set_class_value(&mut self, _new_value: f64) -> Result<(), Error> {
+            unimplemented!()
         }
 
         fn is_class_missing(&self) -> bool {
-            panic!("not implemented")
+            unimplemented!()
         }
 
         fn number_of_classes(&self) -> usize {
-            panic!("not implemented")
+            unimplemented!()
         }
 
         fn to_vec(&self) -> Vec<f64> {
-            panic!("not implemented")
+            unimplemented!()
         }
 
         fn header(&self) -> &InstanceHeader {
-            panic!("not implemented")
+            unimplemented!()
         }
     }
 
@@ -297,7 +297,7 @@ mod tests {
 
         let inst = TestInstance::new(vec![1.0, f64::NAN], 1, None, 1.0);
 
-        let votes = nb.get_votes_for_instance(Box::new(inst)).unwrap();
+        let votes = nb.get_votes_for_instance(&inst).unwrap();
         assert_eq!(votes.len(), 2);
         assert!(approx(votes[0], 4.0 / 15.0 * 1.0, 1e-12));
         assert!(approx(votes[1], 0.15, EPS));
@@ -311,7 +311,7 @@ mod tests {
 
         let inst = TestInstance::new(vec![f64::NAN, 0.0], 1, None, 1.0);
 
-        let votes = nb.get_votes_for_instance(Box::new(inst)).unwrap();
+        let votes = nb.get_votes_for_instance(&inst).unwrap();
         assert!(approx(votes[0], 0.5, EPS));
         assert!(approx(votes[1], 0.5, EPS));
     }
@@ -332,7 +332,7 @@ mod tests {
         nb.attribute_observers[0] = Some(Box::new(gobs));
 
         let inst_near_c0 = TestInstance::new(vec![0.2, 0.0], 1, None, 1.0);
-        let v0 = nb.get_votes_for_instance(Box::new(inst_near_c0)).unwrap();
+        let v0 = nb.get_votes_for_instance(&inst_near_c0).unwrap();
         assert!(
             v0[0] > v0[1],
             "esperado voto classe 0 > classe 1; got: {:?}",
@@ -340,7 +340,7 @@ mod tests {
         );
 
         let inst_near_c1 = TestInstance::new(vec![5.2, 0.0], 1, None, 1.0);
-        let v1 = nb.get_votes_for_instance(Box::new(inst_near_c1)).unwrap();
+        let v1 = nb.get_votes_for_instance(&inst_near_c1).unwrap();
         assert!(
             v1[1] > v1[0],
             "esperado voto classe 1 > classe 0; got: {:?}",
@@ -355,7 +355,7 @@ mod tests {
         nb.attribute_observers = vec![None, None];
 
         let inst = TestInstance::new(vec![1.0, 2.0, 0.0], 2, None, 1.0);
-        let votes = nb.get_votes_for_instance(Box::new(inst)).unwrap();
+        let votes = nb.get_votes_for_instance(&inst).unwrap();
         let sum = nb.observed_class_distribution.iter().sum::<f64>();
         assert!(approx(votes[0], 2.0 / sum, EPS));
         assert!(approx(votes[1], 6.0 / sum, EPS));
@@ -385,7 +385,7 @@ mod tests {
         nb.attribute_observers[1] = Some(Box::new(gobs));
 
         let inst = TestInstance::new(vec![1.0, 0.05, f64::NAN], 2, None, 1.0);
-        let votes = nb.get_votes_for_instance(Box::new(inst)).unwrap();
+        let votes = nb.get_votes_for_instance(&inst).unwrap();
         assert!(votes[0] > votes[1], "esperado C0> C1. votes={:?}", votes);
     }
 
@@ -421,7 +421,7 @@ mod tests {
         assert!(nb.attribute_observers[0].is_some());
 
         let test = TestInstance::new(vec![1.0, f64::NAN], class_idx, None, 1.0);
-        let votes = nb.get_votes_for_instance(Box::new(test)).unwrap();
+        let votes = nb.get_votes_for_instance(&test).unwrap();
         assert_eq!(votes.len(), 2);
         assert!(approx(votes[0], 0.3, 1e-6), "votes={:?}", votes);
         assert!(approx(votes[1], 0.2, 1e-6), "votes={:?}", votes);
@@ -476,11 +476,11 @@ mod tests {
         assert!(nb.attribute_observers[0].is_some());
 
         let near_c0 = TestInstance::new(vec![0.15, f64::NAN], class_idx, None, 1.0);
-        let v0 = nb.get_votes_for_instance(Box::new(near_c0)).unwrap();
+        let v0 = nb.get_votes_for_instance(&near_c0).unwrap();
         assert!(v0[0] > v0[1], "esperado C0 > C1; votes={:?}", v0);
 
         let near_c1 = TestInstance::new(vec![5.1, f64::NAN], class_idx, None, 1.0);
-        let v1 = nb.get_votes_for_instance(Box::new(near_c1)).unwrap();
+        let v1 = nb.get_votes_for_instance(&near_c1).unwrap();
         assert!(v1[1] > v1[0], "esperado C1 > C0; votes={:?}", v1);
     }
 }

@@ -1,5 +1,6 @@
 use crate::core::instances::Instance;
 use crate::evaluation::Measurement;
+use std::collections::HashMap;
 
 /// Online evaluator of predictive performance.
 ///
@@ -19,4 +20,29 @@ pub trait PerformanceEvaluator {
 
     /// Returns a snapshot of current metrics.
     fn performance(&self) -> Vec<Measurement>;
+}
+
+pub trait PerformanceEvaluatorExt {
+    /// Returns (name, Some(value)|None) for each requested metric, preserving order.
+    fn metrics<'a, I>(&self, names: I) -> Vec<(String, Option<f64>)>
+    where
+        I: IntoIterator<Item = &'a str>;
+
+    fn metric(&self, name: &str) -> Option<f64> {
+        self.metrics([name]).into_iter().next().unwrap().1
+    }
+}
+
+impl<T: PerformanceEvaluator + ?Sized> PerformanceEvaluatorExt for T {
+    fn metrics<'a, I>(&self, names: I) -> Vec<(String, Option<f64>)>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        let ms = self.performance();
+        let map: HashMap<_, _> = ms.into_iter().map(|m| (m.name, m.value)).collect();
+        names
+            .into_iter()
+            .map(|n| (n.to_string(), map.get(n).copied()))
+            .collect()
+    }
 }
