@@ -2,9 +2,9 @@ use crate::core::attributes::{Attribute, AttributeRef, NominalAttribute};
 use std::fmt;
 
 pub struct InstanceHeader {
-    pub relation_name: String,
+    relation_name: String,
     pub attributes: Vec<AttributeRef>,
-    pub class_index: usize,
+    class_index: usize,
 }
 
 impl InstanceHeader {

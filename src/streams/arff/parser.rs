@@ -98,11 +98,11 @@ pub(super) fn parse_header(
         }
     }
 
-    let header = InstanceHeader {
+    let header = InstanceHeader::new(
+        relation.unwrap_or_else(|| "unnamed_relation".to_string()),
         attributes,
         class_index,
-        relation_name: relation.unwrap_or_else(|| "unnamed_relation".to_string()),
-    };
+    );
 
     Ok((header, data_start_pos))
 }

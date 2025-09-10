@@ -26,7 +26,7 @@ fn income_total(salary: f64, commission: f64) -> f64 {
 }
 #[inline]
 fn disposable_basic(salary: f64, commission: f64) -> f64 {
-    (2.0 * income_total(salary, commission) / 3.0)
+    2.0 * income_total(salary, commission) / 3.0
 }
 #[inline]
 fn equity(hvalue: f64, hyears: i32) -> f64 {

@@ -341,24 +341,6 @@ mod tests {
         assert!(kappa.abs() < 1e-12);
     }
 
-    // #[test]
-    // fn kappa_temporal_and_majority() {
-    //     let h = header_binary();
-    //     let mut ev: Eval = Eval::new(2);
-    //
-    //     let a = inst(&h, 0, 1.0);
-    //     ev.add_result(&a, votes(0));
-    //     let b = inst(&h, 1, 1.0);
-    //     ev.add_result(&b, votes(1));
-    //
-    //     let perf = ev.performance();
-    //     let get = |name: &str| perf.iter().find(|m| m.name == name).unwrap().value;
-    //
-    //     assert!((get("accuracy") - 1.0).abs() < 1e-12);
-    //     assert!((get("kappa_t") - 1.0).abs() < 1e-12);
-    //     assert!((get("kappa_m") - 1.0).abs() < 1e-12);
-    // }
-
     #[test]
     fn weight_zero_is_ignored() {
         let h = header_binary();
