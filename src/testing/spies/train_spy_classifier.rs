@@ -33,13 +33,13 @@ impl TrainSpyClassifier {
 }
 
 impl Classifier for TrainSpyClassifier {
-    fn get_votes_for_instance(&self, inst: &dyn Instance) -> Option<Vec<f64>> {
-        let y = inst.class_value()? as usize;
+    fn get_votes_for_instance(&self, inst: &dyn Instance) -> Vec<f64> {
+        let y = inst.class_value().unwrap_or_default() as usize;
         let mut v = vec![0.0; self.num_classes.max(2)];
         if y < v.len() {
             v[y] = 1.0;
         }
-        Some(v)
+        v
     }
 
     fn set_model_context(&mut self, h: Arc<InstanceHeader>) {

@@ -48,43 +48,59 @@ impl NaiveBayes {
             model_idx + 1
         }
     }
+
+    pub fn do_naive_bayes_prediction(
+        instance: &dyn Instance,
+        observed_class_distribution: &[f64],
+        attribute_observers: &[Option<Box<dyn AttributeClassObserver>>],
+    ) -> Vec<f64> {
+        {
+            let mut votes = vec![0.0; observed_class_distribution.len()];
+            let observed_class_sum: f64 = observed_class_distribution.iter().copied().sum();
+
+            for class_index in 0..votes.len() {
+                let mut score = observed_class_distribution[class_index] / observed_class_sum;
+
+                for att_index in 0..(instance.number_of_attributes() - 1) {
+                    let inst_att_index = Self::model_att_index_to_instance_att_index(
+                        att_index,
+                        instance.class_index(),
+                    );
+
+                    let is_missing = instance.is_missing_at_index(inst_att_index).unwrap_or(true);
+
+                    if is_missing {
+                        continue;
+                    };
+
+                    let Some(Some(obs)) = attribute_observers.get(att_index) else {
+                        continue;
+                    };
+
+                    let Some(x) = instance.value_at_index(inst_att_index) else {
+                        continue;
+                    };
+
+                    let p = obs
+                        .probability_of_attribute_value_given_class(x, class_index)
+                        .unwrap_or(0.0);
+
+                    score *= p;
+                }
+                votes[class_index] = score;
+            }
+            votes
+        }
+    }
 }
 
 impl Classifier for NaiveBayes {
-    fn get_votes_for_instance(&self, instance: &dyn Instance) -> Option<Vec<f64>> {
-        let mut votes = vec![0.0; self.observed_class_distribution.len()];
-        let observed_class_sum: f64 = self.observed_class_distribution.iter().copied().sum();
-
-        for class_index in 0..votes.len() {
-            let mut score = self.observed_class_distribution[class_index] / observed_class_sum;
-
-            for att_index in 0..(instance.number_of_attributes() - 1) {
-                let inst_att_index =
-                    Self::model_att_index_to_instance_att_index(att_index, instance.class_index());
-
-                let is_missing = instance.is_missing_at_index(inst_att_index).unwrap_or(true);
-
-                if is_missing {
-                    continue;
-                };
-
-                let Some(Some(obs)) = self.attribute_observers.get(att_index) else {
-                    continue;
-                };
-
-                let Some(x) = instance.value_at_index(inst_att_index) else {
-                    continue;
-                };
-
-                let p = obs
-                    .probability_of_attribute_value_given_class(x, class_index)
-                    .unwrap_or(0.0);
-
-                score *= p;
-            }
-            votes[class_index] = score;
-        }
-        Some(votes)
+    fn get_votes_for_instance(&self, instance: &dyn Instance) -> Vec<f64> {
+        NaiveBayes::do_naive_bayes_prediction(
+            instance,
+            &self.observed_class_distribution,
+            &self.attribute_observers,
+        )
     }
 
     fn set_model_context(&mut self, header: Arc<InstanceHeader>) {
@@ -297,7 +313,7 @@ mod tests {
 
         let inst = TestInstance::new(vec![1.0, f64::NAN], 1, None, 1.0);
 
-        let votes = nb.get_votes_for_instance(&inst).unwrap();
+        let votes = nb.get_votes_for_instance(&inst);
         assert_eq!(votes.len(), 2);
         assert!(approx(votes[0], 4.0 / 15.0 * 1.0, 1e-12));
         assert!(approx(votes[1], 0.15, EPS));
@@ -311,7 +327,7 @@ mod tests {
 
         let inst = TestInstance::new(vec![f64::NAN, 0.0], 1, None, 1.0);
 
-        let votes = nb.get_votes_for_instance(&inst).unwrap();
+        let votes = nb.get_votes_for_instance(&inst);
         assert!(approx(votes[0], 0.5, EPS));
         assert!(approx(votes[1], 0.5, EPS));
     }
@@ -332,18 +348,18 @@ mod tests {
         nb.attribute_observers[0] = Some(Box::new(gobs));
 
         let inst_near_c0 = TestInstance::new(vec![0.2, 0.0], 1, None, 1.0);
-        let v0 = nb.get_votes_for_instance(&inst_near_c0).unwrap();
+        let v0 = nb.get_votes_for_instance(&inst_near_c0);
         assert!(
             v0[0] > v0[1],
-            "esperado voto classe 0 > classe 1; got: {:?}",
+            "waiting votes class 1 > class 0; got: {:?}",
             v0
         );
 
         let inst_near_c1 = TestInstance::new(vec![5.2, 0.0], 1, None, 1.0);
-        let v1 = nb.get_votes_for_instance(&inst_near_c1).unwrap();
+        let v1 = nb.get_votes_for_instance(&inst_near_c1);
         assert!(
             v1[1] > v1[0],
-            "esperado voto classe 1 > classe 0; got: {:?}",
+            "waiting votes class 1 > class 0; got: {:?}",
             v1
         );
     }
@@ -355,7 +371,7 @@ mod tests {
         nb.attribute_observers = vec![None, None];
 
         let inst = TestInstance::new(vec![1.0, 2.0, 0.0], 2, None, 1.0);
-        let votes = nb.get_votes_for_instance(&inst).unwrap();
+        let votes = nb.get_votes_for_instance(&inst);
         let sum = nb.observed_class_distribution.iter().sum::<f64>();
         assert!(approx(votes[0], 2.0 / sum, EPS));
         assert!(approx(votes[1], 6.0 / sum, EPS));
@@ -385,8 +401,8 @@ mod tests {
         nb.attribute_observers[1] = Some(Box::new(gobs));
 
         let inst = TestInstance::new(vec![1.0, 0.05, f64::NAN], 2, None, 1.0);
-        let votes = nb.get_votes_for_instance(&inst).unwrap();
-        assert!(votes[0] > votes[1], "esperado C0> C1. votes={:?}", votes);
+        let votes = nb.get_votes_for_instance(&inst);
+        assert!(votes[0] > votes[1], "waiting C0> C1. votes={:?}", votes);
     }
 
     #[test]
@@ -421,7 +437,7 @@ mod tests {
         assert!(nb.attribute_observers[0].is_some());
 
         let test = TestInstance::new(vec![1.0, f64::NAN], class_idx, None, 1.0);
-        let votes = nb.get_votes_for_instance(&test).unwrap();
+        let votes = nb.get_votes_for_instance(&test);
         assert_eq!(votes.len(), 2);
         assert!(approx(votes[0], 0.3, 1e-6), "votes={:?}", votes);
         assert!(approx(votes[1], 0.2, 1e-6), "votes={:?}", votes);
@@ -476,11 +492,11 @@ mod tests {
         assert!(nb.attribute_observers[0].is_some());
 
         let near_c0 = TestInstance::new(vec![0.15, f64::NAN], class_idx, None, 1.0);
-        let v0 = nb.get_votes_for_instance(&near_c0).unwrap();
-        assert!(v0[0] > v0[1], "esperado C0 > C1; votes={:?}", v0);
+        let v0 = nb.get_votes_for_instance(&near_c0);
+        assert!(v0[0] > v0[1], "waiting C0 > C1; votes={:?}", v0);
 
         let near_c1 = TestInstance::new(vec![5.1, f64::NAN], class_idx, None, 1.0);
-        let v1 = nb.get_votes_for_instance(&near_c1).unwrap();
-        assert!(v1[1] > v1[0], "esperado C1 > C0; votes={:?}", v1);
+        let v1 = nb.get_votes_for_instance(&near_c1);
+        assert!(v1[1] > v1[0], "waiting C1 > C0; votes={:?}", v1);
     }
 }
