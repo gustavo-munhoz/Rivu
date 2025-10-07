@@ -1,10 +1,11 @@
 use crate::classifiers::Classifier;
 use crate::core::instance_header::InstanceHeader;
-use crate::evaluation::{LearningCurve, PerformanceEvaluator, PerformanceEvaluatorExt, Snapshot};
+use crate::evaluation::{LearningCurve, PerformanceEvaluator, Snapshot};
 use crate::streams::Stream;
 use crate::utils::system::current_rss_gb;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
+use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 pub struct PrequentialEvaluator {
@@ -24,6 +25,8 @@ pub struct PrequentialEvaluator {
     last_sample_time: Instant,
     last_mem_sample: Instant,
     ram_hours: f64,
+
+    progress_tx: Option<Sender<Snapshot>>,
 }
 
 impl PrequentialEvaluator {
@@ -71,11 +74,17 @@ impl PrequentialEvaluator {
             last_sample_time: Instant::now(),
             last_mem_sample: Instant::now(),
             ram_hours: 0.0,
+            progress_tx: None,
         })
     }
 }
 
 impl PrequentialEvaluator {
+    pub fn with_progress(mut self, tx: Sender<Snapshot>) -> Self {
+        self.progress_tx = Some(tx);
+        self
+    }
+
     pub fn run(&mut self) -> Result<(), Error> {
         self.start_time = Instant::now();
         self.last_sample_time = self.start_time;
@@ -120,19 +129,39 @@ impl PrequentialEvaluator {
     }
 
     fn push_snapshot(&mut self) {
-        let secs = self.start_time.elapsed().as_secs_f64();
-        let metrics = self.evaluator.metrics(["accuracy", "kappa"]);
+        use std::collections::BTreeMap;
 
-        let acc = metrics.get(0).and_then(|(_, v)| *v).unwrap_or(f64::NAN);
-        let kappa = metrics.get(1).and_then(|(_, v)| *v).unwrap_or(f64::NAN);
+        let secs = self.start_time.elapsed().as_secs_f64();
+        let perf = self.evaluator.performance();
+
+        let mut acc = f64::NAN;
+        let mut kap = f64::NAN;
+        let mut extras = BTreeMap::new();
+
+        for m in perf {
+            let key: &str = m.name.as_ref();
+            match key {
+                "accuracy" => acc = m.value,
+                "kappa" => kap = m.value,
+                _ => {
+                    extras.insert(key.to_string(), m.value);
+                }
+            }
+        }
 
         let snapshot = Snapshot {
             instances_seen: self.processed,
             accuracy: acc,
-            kappa,
+            kappa: kap,
             ram_hours: self.ram_hours,
             seconds: secs,
+            extras,
         };
+
+        if let Some(tx) = &self.progress_tx {
+            let _ = tx.send(snapshot.clone());
+        }
+
         self.curve.push(snapshot);
         self.last_sample_time = Instant::now();
     }
@@ -161,7 +190,7 @@ mod tests {
             Box::new(VecStream::new((0..10).map(|i| (i % 2) as usize).collect()));
         let l: Box<dyn Classifier> = Box::new(OracleClassifier::default());
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
         let err = PrequentialEvaluator::new(l, s, e, None, None, 0, 5)
             .err()
             .unwrap();
@@ -171,7 +200,7 @@ mod tests {
             Box::new(VecStream::new((0..10).map(|i| (i % 2) as usize).collect()));
         let l: Box<dyn Classifier> = Box::new(OracleClassifier::default());
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
         let err = PrequentialEvaluator::new(l, s, e, None, None, 5, 0)
             .err()
             .unwrap();
@@ -184,7 +213,7 @@ mod tests {
             Box::new(VecStream::new((0..100).map(|i| (i % 2) as usize).collect()));
         let l: Box<dyn Classifier> = Box::new(OracleClassifier::default());
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
 
         let mut pq = PrequentialEvaluator::new(l, s, e, None, None, 10, 7).unwrap();
         pq.run().unwrap();
@@ -204,7 +233,7 @@ mod tests {
         ));
         let l: Box<dyn Classifier> = Box::new(OracleClassifier::default());
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
 
         let mut pq = PrequentialEvaluator::new(l, s, e, Some(25), None, 5, 3).unwrap();
         pq.run().unwrap();
@@ -220,7 +249,7 @@ mod tests {
             Box::new(VecStream::new((0..100).map(|i| (i % 2) as usize).collect()));
         let l: Box<dyn Classifier> = Box::new(OracleClassifier::default());
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
 
         let mut pq = PrequentialEvaluator::new(l, s, e, None, Some(0), 10, 10).unwrap();
         pq.run().unwrap();
@@ -228,7 +257,7 @@ mod tests {
         assert_eq!(pq.curve().len(), 1);
         let last = pq.curve().latest().unwrap();
         assert_eq!(last.instances_seen, 0);
-        assert_eq!(last.accuracy, 0.0);
+        assert!(last.accuracy.is_nan());
         assert_eq!(last.kappa, 0.0);
     }
 
@@ -238,7 +267,7 @@ mod tests {
             Box::new(VecStream::new((0..12).map(|i| (i % 2) as usize).collect()));
         let l: Box<dyn Classifier> = Box::new(OracleClassifier::default());
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
 
         let mut pq = PrequentialEvaluator::new(l, s, e, None, None, 5, 1).unwrap();
         pq.run().unwrap();
@@ -248,18 +277,18 @@ mod tests {
     }
 
     #[test]
-    fn votes_none_keeps_metrics_zero() {
+    fn votes_none_keeps_metrics_nan_and_zero() {
         let s: Box<dyn Stream> =
             Box::new(VecStream::new((0..20).map(|i| (i % 2) as usize).collect()));
         let l: Box<dyn Classifier> = Box::new(ClassifierNoneVotes::default());
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
 
         let mut pq = PrequentialEvaluator::new(l, s, e, None, None, 10, 2).unwrap();
         pq.run().unwrap();
 
         let last = pq.curve().latest().unwrap();
-        assert_eq!(last.accuracy, 0.0);
+        assert!(last.accuracy.is_nan());
         assert_eq!(last.kappa, 0.0);
     }
 
@@ -272,7 +301,7 @@ mod tests {
         let l: Box<dyn Classifier> = Box::new(spy_cls);
 
         let e: Box<dyn PerformanceEvaluator> =
-            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new(2));
+            Box::new(BasicClassificationEvaluator::<BasicEstimator>::new_with_default_flags(2));
 
         let mut pq = PrequentialEvaluator::new(l, s, e, None, None, 10, 4).unwrap();
         pq.run().unwrap();

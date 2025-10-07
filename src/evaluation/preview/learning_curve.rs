@@ -19,6 +19,17 @@ impl LearningCurve {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, Snapshot> {
+        self.entries.iter()
+    }
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Snapshot> {
+        self.entries.iter_mut()
+    }
+    pub fn as_slice(&self) -> &[Snapshot] {
+        &self.entries
+    }
+
     pub fn latest(&self) -> Option<Snapshot> {
         self.entries.last().cloned()
     }
@@ -82,6 +93,7 @@ impl Default for LearningCurve {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use std::fs;
     use tempfile::NamedTempFile;
 
@@ -92,6 +104,7 @@ mod tests {
             kappa: kap,
             ram_hours: ram,
             seconds: secs,
+            extras: BTreeMap::<String, f64>::new(),
         }
     }
 
