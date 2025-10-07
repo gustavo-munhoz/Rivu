@@ -5,11 +5,11 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 
-use Rivu::evaluation::Snapshot;
-use Rivu::tasks::PrequentialEvaluator;
-use Rivu::ui::cli::{drivers::InquireDriver, wizard::prompt_choice};
-use Rivu::ui::types::build::{build_evaluator, build_learner, build_stream};
-use Rivu::ui::types::choices::TaskChoice;
+use rivu::evaluation::Snapshot;
+use rivu::tasks::PrequentialEvaluator;
+use rivu::ui::cli::{drivers::InquireDriver, wizard::prompt_choice};
+use rivu::ui::types::build::{build_evaluator, build_learner, build_stream};
+use rivu::ui::types::choices::TaskChoice;
 
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
