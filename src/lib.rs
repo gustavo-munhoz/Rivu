@@ -3,6 +3,7 @@ pub mod core;
 pub mod evaluation;
 pub mod streams;
 pub mod tasks;
+pub mod ui;
 pub mod utils;
 
 #[cfg(any(test, feature = "test-support"))]

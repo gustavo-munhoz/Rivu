@@ -1,9 +1,6 @@
-use serde::Deserialize;
-
 /// Summarized scalar metric produced by a performance evaluator.
 ///
 /// Typical examples: `"accuracy"`, `"kappa"`, `"log_loss"`.
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Measurement {
     pub name: String,

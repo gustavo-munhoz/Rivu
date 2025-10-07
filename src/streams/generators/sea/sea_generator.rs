@@ -15,13 +15,12 @@ use crate::streams::stream::Stream;
 pub struct SeaGenerator {
     seed: u64,
     rng: StdRng,
-    function: SeaFunction,
     threshold: f64,
     balance_classes: bool,
     next_class_should_be_zero: bool,
     noise_percentage: u32,
     header: Arc<InstanceHeader>,
-    max_instances: Option<usize>,
+    concept_instances_number: Option<usize>,
     produced: usize,
 }
 
@@ -30,7 +29,7 @@ impl SeaGenerator {
         function: SeaFunction,
         balance: bool,
         noise_percentage: u32,
-        max_instances: Option<usize>,
+        concept_instances_number: Option<usize>,
         seed: u64,
     ) -> Result<Self, Error> {
         if noise_percentage > 100 {
@@ -58,46 +57,13 @@ impl SeaGenerator {
         Ok(Self {
             seed,
             rng: StdRng::seed_from_u64(seed),
-            function,
             threshold: function.threshold(),
             balance_classes: balance,
             next_class_should_be_zero: false,
             noise_percentage,
             header,
-            max_instances,
+            concept_instances_number,
             produced: 0,
-        })
-    }
-
-    pub fn new_with_threshold(
-        threshold: f64,
-        balance: bool,
-        noise_percentage: u32,
-        max_instances: Option<usize>,
-        seed: u64,
-    ) -> Result<Self, Error> {
-        if !(0.0..=20.0).contains(&threshold) {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "Threshold must be in [0.0, 20.0] for attributes [0,10]",
-            ));
-        }
-        if noise_percentage > 100 {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "Noise percentage must be in [0, 100]",
-            ));
-        }
-        Self::new(
-            SeaFunction::F2,
-            balance,
-            noise_percentage,
-            max_instances,
-            seed,
-        )
-        .map(|mut g| {
-            g.threshold = threshold;
-            g
         })
     }
 
@@ -128,7 +94,8 @@ impl Stream for SeaGenerator {
     }
 
     fn has_more_instances(&self) -> bool {
-        self.max_instances.map_or(true, |max| self.produced < max)
+        self.concept_instances_number
+            .map_or(true, |max| self.produced < max)
     }
 
     fn next_instance(&mut self) -> Option<Box<dyn Instance>> {
@@ -239,18 +206,6 @@ mod tests {
     }
 
     #[test]
-    fn noise_100_percent_flips_all_classes_when_base_is_all_zero() {
-        let mut generator =
-            SeaGenerator::new_with_threshold(20.0, false, 100, Some(50), 99).unwrap();
-        let got = classes_from(&mut generator, 50);
-        assert!(
-            got.iter().all(|&c| c == 1),
-            "esperava todas classes == 1, got={:?}",
-            got
-        );
-    }
-
-    #[test]
     fn restart_resets_sequence_with_same_seed() {
         let mut generator = SeaGenerator::new(SeaFunction::F3, true, 10, Some(100), 12345).unwrap();
         let first: Vec<Vec<f64>> = (0..30)
@@ -261,19 +216,6 @@ mod tests {
             .map(|_| generator.next_instance().unwrap().to_vec())
             .collect();
         assert_eq!(first, second);
-    }
-
-    #[test]
-    fn invalid_parameters_are_rejected() {
-        // noise > 100
-        let err = SeaGenerator::new(SeaFunction::F1, false, 101, None, 1).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidInput);
-
-        let err = SeaGenerator::new_with_threshold(-0.1, false, 0, None, 1).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidInput);
-
-        let err = SeaGenerator::new_with_threshold(20.1, false, 0, None, 1).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidInput);
     }
 
     #[test]

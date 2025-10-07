@@ -1,5 +1,7 @@
 mod asset_negotiation;
 mod domain;
-pub mod function;
+mod function;
 mod rules;
+
+pub use asset_negotiation::AssetNegotiationGenerator;
 pub use function::AssetRule;
