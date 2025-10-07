@@ -1,7 +1,10 @@
 [package]
-name = "Rivu"
+name = "rivu"
 version = "0.1.0"
 edition = "2024"
+license = "AGPL-3"
+repository = "https://github.com/gustavo-munhoz/rivu"
+description = "A MOA-inspired project to optimize Naive Bayes and Hoeffding Trees algorithms with a rust implementation."
 
 [features]
 test-support = []
