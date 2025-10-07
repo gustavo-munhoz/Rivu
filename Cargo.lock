@@ -3,6 +3,25 @@
 version = 4
 
 [[package]]
+name = "Rivu"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "inquire",
+ "libc",
+ "mach2",
+ "rand",
+ "schemars",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -62,17 +81,6 @@ dependencies = [
  "num-traits",
  "wasm-bindgen",
  "windows-link 0.2.1",
-]
-
-[[package]]
-name = "comfy-table"
-version = "7.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b03b7db8e0b4b2fdad6c551e634134e99ec000e5c8c3b6856c65e8bbaded7a3b"
-dependencies = [
- "crossterm",
- "unicode-segmentation",
- "unicode-width",
 ]
 
 [[package]]
@@ -315,26 +323,6 @@ dependencies = [
  "log",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "naive-bayes-hoeffding-trees-rust-implementation"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "comfy-table",
- "inquire",
- "libc",
- "mach2",
- "rand",
- "schemars",
- "serde",
- "serde_json",
- "strum",
- "strum_macros",
- "tempfile",
- "thiserror",
 ]
 
 [[package]]
