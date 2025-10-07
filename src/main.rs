@@ -5,15 +5,11 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 
-use naive_bayes_hoeffding_trees_rust_implementation::evaluation::Snapshot;
-use naive_bayes_hoeffding_trees_rust_implementation::tasks::PrequentialEvaluator;
-use naive_bayes_hoeffding_trees_rust_implementation::ui::cli::{
-    drivers::InquireDriver, wizard::prompt_choice,
-};
-use naive_bayes_hoeffding_trees_rust_implementation::ui::types::build::{
-    build_evaluator, build_learner, build_stream,
-};
-use naive_bayes_hoeffding_trees_rust_implementation::ui::types::choices::TaskChoice;
+use Rivu::evaluation::Snapshot;
+use Rivu::tasks::PrequentialEvaluator;
+use Rivu::ui::cli::{drivers::InquireDriver, wizard::prompt_choice};
+use Rivu::ui::types::build::{build_evaluator, build_learner, build_stream};
+use Rivu::ui::types::choices::TaskChoice;
 
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
