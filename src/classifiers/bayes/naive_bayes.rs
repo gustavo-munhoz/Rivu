@@ -116,7 +116,7 @@ impl Classifier for NaiveBayes {
             .resize_with(num_model_atts, || None);
     }
 
-    fn train_on_instance(&mut self, instance: Box<dyn Instance>) {
+    fn train_on_instance(&mut self, instance: &dyn Instance) {
         let header = match self.header.as_ref() {
             Some(header) => header.clone(),
             None => return,
@@ -418,7 +418,7 @@ mod tests {
 
         let train = |nb: &mut NaiveBayes, x: f64, c: f64| {
             let inst = TestInstance::new(vec![x, f64::NAN], class_idx, Some(c), 1.0);
-            nb.train_on_instance(Box::new(inst));
+            nb.train_on_instance(&inst);
         };
 
         train(&mut nb, 1.0, 0.0);
@@ -453,7 +453,7 @@ mod tests {
         nb.set_model_context(Arc::new(header));
 
         let inst = TestInstance::new(vec![f64::NAN, f64::NAN], 1, Some(0.0), 2.0);
-        nb.train_on_instance(Box::new(inst));
+        nb.train_on_instance(&inst);
 
         assert_eq!(nb.observed_class_distribution.len(), 2);
         assert!(approx(nb.observed_class_distribution[0], 2.0, EPS));
@@ -476,7 +476,7 @@ mod tests {
 
         let train = |nb: &mut NaiveBayes, x: f64, c: f64| {
             let inst = TestInstance::new(vec![x, f64::NAN], class_idx, Some(c), 1.0);
-            nb.train_on_instance(Box::new(inst));
+            nb.train_on_instance(&inst);
         };
 
         for &v in &[-0.5, 0.0, 0.1, 0.2, -0.2] {

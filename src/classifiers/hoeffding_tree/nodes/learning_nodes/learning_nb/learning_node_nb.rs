@@ -7,7 +7,10 @@ use crate::classifiers::hoeffding_tree::nodes::Node;
 use crate::classifiers::hoeffding_tree::nodes::SplitNode;
 use crate::core::attributes::NominalAttribute;
 use crate::core::instances::Instance;
-use std::sync::Arc;
+use std::any::Any;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 pub struct LearningNodeNB {
     observed_class_distribution: Vec<f64>,
@@ -38,6 +41,10 @@ impl LearningNodeNB {
     pub fn set_weight_seen_at_last_split_evaluation(&mut self, weight: f64) {
         self.weight_seen_at_last_split_evaluation = weight;
     }
+
+    pub fn num_non_zero_entries(vec: &Vec<f64>) -> usize {
+        vec.iter().filter(|&&x| x != 0.0).count()
+    }
 }
 
 impl Node for LearningNodeNB {
@@ -49,13 +56,27 @@ impl Node for LearningNodeNB {
         true
     }
 
-    fn filter_instance_to_leaf<'a>(
-        &'a self,
-        instance: Arc<dyn Instance>,
-        parent: Option<&'a SplitNode>,
-        parent_branch: usize,
-    ) -> FoundNode<'a> {
-        FoundNode::new(Some(self), parent, parent_branch)
+    fn filter_instance_to_leaf(
+        self_arc: Rc<RefCell<Self>>,
+        instance: &dyn Instance,
+        parent: Option<Rc<RefCell<dyn Node>>>,
+        parent_branch: isize,
+    ) -> FoundNode {
+        FoundNode::new(
+            Some(self_arc as Rc<RefCell<dyn Node>>),
+            parent,
+            parent_branch,
+        )
+    }
+
+    fn filter_instance_to_leaf_dyn(
+        &self,
+        self_arc_dyn: Rc<RefCell<dyn Node>>,
+        _instance: &dyn Instance,
+        parent: Option<Rc<RefCell<dyn Node>>>,
+        parent_branch: isize,
+    ) -> FoundNode {
+        FoundNode::new(Some(self_arc_dyn), parent, parent_branch)
     }
 
     fn get_observed_class_distribution_at_leaves_reachable_through_this_node(&self) -> Vec<f64> {
@@ -74,10 +95,22 @@ impl Node for LearningNodeNB {
         }
         self.observed_class_distribution.clone()
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn observed_class_distribution_is_pure(&self) -> bool {
+        Self::num_non_zero_entries(&self.observed_class_distribution) < 2
+    }
 }
 
 impl LearningNode for LearningNodeNB {
-    fn learn_from_instance(&mut self, instance: Arc<dyn Instance>, hoeffding_tree: &HoeffdingTree) {
+    fn learn_from_instance(&mut self, instance: &dyn Instance, hoeffding_tree: &HoeffdingTree) {
         if !self.is_initialized {
             self.attribute_observers = (0..instance.number_of_attributes()).map(|_| None).collect();
             self.is_initialized = true;
@@ -90,7 +123,7 @@ impl LearningNode for LearningNodeNB {
 
         for i in 0..instance.number_of_attributes() - 1 {
             let instance_attribute_index =
-                HoeffdingTree::model_attribute_index_to_instance_attribute_index(i, &instance);
+                HoeffdingTree::model_attribute_index_to_instance_attribute_index(i, instance);
 
             if self.attribute_observers[i].is_none() {
                 if let Some(attribute) = instance.attribute_at_index(instance_attribute_index) {

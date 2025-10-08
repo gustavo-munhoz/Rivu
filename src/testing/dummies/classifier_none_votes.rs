@@ -11,5 +11,5 @@ impl Classifier for ClassifierNoneVotes {
         Vec::new()
     }
     fn set_model_context(&mut self, header: Arc<InstanceHeader>) {}
-    fn train_on_instance(&mut self, instance: Box<dyn Instance>) {}
+    fn train_on_instance(&mut self, instance: &dyn Instance) {}
 }

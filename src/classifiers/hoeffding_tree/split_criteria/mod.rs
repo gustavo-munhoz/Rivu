@@ -1,2 +1,4 @@
-mod gini_split_criterion;
-mod split_criterion;
+pub use gini_split_criterion::GiniSplitCriterion;
+pub use split_criterion::SplitCriterion;
+pub mod gini_split_criterion;
+pub mod split_criterion;
