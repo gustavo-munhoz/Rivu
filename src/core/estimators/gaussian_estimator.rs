@@ -1,3 +1,5 @@
+use crate::utils::math::normal_probability;
+
 #[derive(Clone, Debug, Default)]
 pub struct GaussianEstimator {
     weight_sum: f64,
@@ -39,6 +41,31 @@ impl GaussianEstimator {
         self.get_variance().sqrt()
     }
 
+    pub fn get_total_weight_observed(&self) -> f64 {
+        self.weight_sum
+    }
+
+    pub fn estimated_weight_less_equal_greater_value(&self, value: f64) -> [f64; 3] {
+        let equal_weight = self.probability_density(value) * self.weight_sum;
+        let std_dev = self.get_std_dev();
+        let less_weight = if std_dev > 0.0 {
+            let z = (value - self.mean) / std_dev;
+            normal_probability(z) * self.weight_sum - equal_weight
+        } else {
+            if value < self.mean {
+                self.weight_sum - equal_weight
+            } else {
+                0.0
+            }
+        };
+
+        let mut greater_weight = self.weight_sum - equal_weight - less_weight;
+        if greater_weight < 0.0 {
+            greater_weight = 0.0;
+        }
+        [less_weight, equal_weight, greater_weight]
+    }
+
     #[inline]
     pub fn add_observations(&mut self, observer: &GaussianEstimator) {
         if (self.weight_sum > 0.0) && (observer.weight_sum > 0.0) {
@@ -68,6 +95,10 @@ impl GaussianEstimator {
             };
         }
         0.0
+    }
+
+    pub fn estimate_size_bytes(&self) -> usize {
+        size_of::<Self>()
     }
 }
 

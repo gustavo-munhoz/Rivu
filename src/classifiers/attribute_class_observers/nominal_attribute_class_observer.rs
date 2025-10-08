@@ -1,4 +1,10 @@
 use crate::classifiers::attribute_class_observers::attribute_class_observer::AttributeClassObserver;
+use crate::classifiers::conditional_tests::attribute_split_suggestion::AttributeSplitSuggestion;
+use crate::classifiers::hoeffding_tree::split_criteria::SplitCriterion;
+use crate::classifiers::hoeffding_tree::{
+    NominalAttributeBinaryTest, NominalAttributeMultiwayTest,
+};
+use std::any::Any;
 
 pub struct NominalAttributeClassObserver {
     total_weight_observed: f64,
@@ -31,6 +37,51 @@ impl NominalAttributeClassObserver {
             row.resize(att_val_int + 1, 0.0);
         }
     }
+
+    pub fn get_max_att_vals_observed(&self) -> usize {
+        self.attribute_value_distribution_per_class
+            .iter()
+            .map(|row| row.len())
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub fn get_class_dists_resulting_from_multiway_split(
+        &self,
+        max_att_vals: usize,
+    ) -> Vec<Vec<f64>> {
+        let mut dists =
+            vec![vec![0.0; self.attribute_value_distribution_per_class.len()]; max_att_vals];
+
+        for (class_idx, row) in self
+            .attribute_value_distribution_per_class
+            .iter()
+            .enumerate()
+        {
+            for (val_idx, &count) in row.iter().enumerate() {
+                dists[val_idx][class_idx] = count;
+            }
+        }
+        dists
+    }
+
+    pub fn get_class_resulting_from_binary_split(&self, val_index: usize) -> Vec<Vec<f64>> {
+        let num_classes = self.attribute_value_distribution_per_class.len();
+        let mut lhs = vec![0.0; num_classes];
+        let mut rhs = vec![0.0; num_classes];
+
+        for (class_idx, row) in self
+            .attribute_value_distribution_per_class
+            .iter()
+            .enumerate()
+        {
+            let lhs_count = *row.get(val_index).unwrap_or(&0.0);
+            lhs[class_idx] += lhs_count;
+            let rhs_count: f64 = row.iter().copied().sum::<f64>() - lhs_count;
+            rhs[class_idx] += rhs_count;
+        }
+        vec![lhs, rhs]
+    }
 }
 
 impl AttributeClassObserver for NominalAttributeClassObserver {
@@ -62,6 +113,64 @@ impl AttributeClassObserver for NominalAttributeClassObserver {
         let sum: f64 = row.iter().copied().sum();
         let k = row.len() as f64;
         Some((count + 1.0) / (sum + k))
+    }
+
+    fn get_best_evaluated_split_suggestion(
+        &self,
+        criterion: &dyn SplitCriterion,
+        pre_split_dist: &[f64],
+        att_index: usize,
+        binary_only: bool,
+    ) -> Option<AttributeSplitSuggestion> {
+        let mut best: Option<AttributeSplitSuggestion> = None;
+        let max_att_vals_observed = self.get_max_att_vals_observed();
+
+        if !binary_only {
+            let post_split_dists =
+                self.get_class_dists_resulting_from_multiway_split(max_att_vals_observed);
+            let merit = criterion.get_merit_of_split(pre_split_dist, &post_split_dists);
+
+            best = Some(AttributeSplitSuggestion::new(
+                Some(Box::new(NominalAttributeMultiwayTest::new(att_index))),
+                post_split_dists,
+                merit,
+            ));
+        }
+
+        for val_index in 0..max_att_vals_observed {
+            let post_split_dists = self.get_class_resulting_from_binary_split(val_index);
+            let merit = criterion.get_merit_of_split(pre_split_dist, &post_split_dists);
+
+            if best.is_none() || merit > best.as_ref().unwrap().get_merit() {
+                best = Some(AttributeSplitSuggestion::new(
+                    Some(Box::new(NominalAttributeBinaryTest::new(
+                        att_index, val_index,
+                    ))),
+                    post_split_dists,
+                    merit,
+                ));
+            }
+        }
+        best
+    }
+
+    fn estimate_size_bytes(&self) -> usize {
+        let mut total = size_of::<Self>();
+
+        for inner in &self.attribute_value_distribution_per_class {
+            total += size_of::<Vec<f64>>();
+            total += inner.len() * size_of::<f64>();
+        }
+
+        total
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

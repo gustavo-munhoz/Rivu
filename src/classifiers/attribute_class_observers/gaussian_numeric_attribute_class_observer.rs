@@ -1,9 +1,14 @@
 use crate::classifiers::attribute_class_observers::attribute_class_observer::AttributeClassObserver;
+use crate::classifiers::conditional_tests::attribute_split_suggestion::AttributeSplitSuggestion;
+use crate::classifiers::hoeffding_tree::NumericAttributeBinaryTest;
+use crate::classifiers::hoeffding_tree::split_criteria::SplitCriterion;
 use crate::core::estimators::gaussian_estimator::GaussianEstimator;
+use std::any::Any;
 pub struct GaussianNumericAttributeClassObserver {
     min_value_observed_per_class: Vec<f64>,
     max_value_observed_per_class: Vec<f64>,
     attribute_value_distribution_per_class: Vec<Option<GaussianEstimator>>,
+    num_bins_option: usize,
 }
 
 impl GaussianNumericAttributeClassObserver {
@@ -12,6 +17,7 @@ impl GaussianNumericAttributeClassObserver {
             min_value_observed_per_class: Vec::new(),
             max_value_observed_per_class: Vec::new(),
             attribute_value_distribution_per_class: Vec::new(),
+            num_bins_option: 10,
         }
     }
 
@@ -26,6 +32,69 @@ impl GaussianNumericAttributeClassObserver {
             self.max_value_observed_per_class
                 .resize(new_len, f64::NEG_INFINITY);
         }
+    }
+
+    fn get_split_point_suggestions(&self) -> Vec<f64> {
+        let mut min_val = f64::INFINITY;
+        let mut max_val = f64::NEG_INFINITY;
+
+        for (i, est_opt) in self
+            .attribute_value_distribution_per_class
+            .iter()
+            .enumerate()
+        {
+            if est_opt.is_some() {
+                if self.min_value_observed_per_class[i] < min_val {
+                    min_val = self.min_value_observed_per_class[i];
+                }
+                if self.max_value_observed_per_class[i] > max_val {
+                    max_val = self.max_value_observed_per_class[i];
+                }
+            }
+        }
+
+        if min_val == f64::INFINITY || max_val == f64::NEG_INFINITY {
+            return vec![];
+        }
+
+        let range = max_val - min_val;
+        let mut suggestions = Vec::new();
+
+        for i in 0..self.num_bins_option {
+            let split_value =
+                (range / (self.num_bins_option as f64 + 1.0)) * (i as f64 + 1.0) + min_val;
+            if split_value > min_val && split_value < max_val {
+                suggestions.push(split_value);
+            }
+        }
+
+        suggestions
+    }
+
+    fn get_class_dists_resulting_from_binary_split(&self, split_value: f64) -> Vec<Vec<f64>> {
+        let num_classes = self.attribute_value_distribution_per_class.len();
+        let mut lhs = vec![0.0; num_classes];
+        let mut rhs = vec![0.0; num_classes];
+
+        for (class_idx, est_opt) in self
+            .attribute_value_distribution_per_class
+            .iter()
+            .enumerate()
+        {
+            if let Some(est) = est_opt {
+                if split_value < self.min_value_observed_per_class[class_idx] {
+                    rhs[class_idx] += est.get_total_weight_observed()
+                } else if split_value >= self.max_value_observed_per_class[class_idx] {
+                    lhs[class_idx] += est.get_total_weight_observed()
+                } else {
+                    let [less, equal, greater] =
+                        est.estimated_weight_less_equal_greater_value(split_value);
+                    lhs[class_idx] += less + equal;
+                    rhs[class_idx] += greater;
+                }
+            }
+        }
+        vec![lhs, rhs]
     }
 }
 
@@ -70,6 +139,60 @@ impl AttributeClassObserver for GaussianNumericAttributeClassObserver {
             Some(Some(est)) => Some(est.probability_density(att_val)),
             _ => None,
         }
+    }
+
+    fn get_best_evaluated_split_suggestion(
+        &self,
+        criterion: &dyn SplitCriterion,
+        pre_split_dist: &[f64],
+        att_index: usize,
+        binary_only: bool,
+    ) -> Option<AttributeSplitSuggestion> {
+        let split_points = self.get_split_point_suggestions();
+        let mut best: Option<AttributeSplitSuggestion> = None;
+
+        for split_value in split_points {
+            let post_dists = self.get_class_dists_resulting_from_binary_split(split_value);
+            let merit = criterion.get_merit_of_split(pre_split_dist, &post_dists);
+
+            if best.is_none() || merit > best.as_ref().unwrap().get_merit() {
+                best = Some(AttributeSplitSuggestion::new(
+                    Some(Box::new(NumericAttributeBinaryTest::new(
+                        att_index,
+                        split_value,
+                        true,
+                    ))),
+                    post_dists,
+                    merit,
+                ));
+            }
+        }
+        best
+    }
+
+    fn estimate_size_bytes(&self) -> usize {
+        let mut total = size_of::<Self>();
+
+        total += self.min_value_observed_per_class.len() * size_of::<f64>();
+        total += self.max_value_observed_per_class.len() * size_of::<f64>();
+
+        total += self.attribute_value_distribution_per_class.len() * size_of::<GaussianEstimator>();
+
+        for est_opt in &self.attribute_value_distribution_per_class {
+            if let Some(est) = est_opt {
+                total += est.estimate_size_bytes();
+            }
+        }
+
+        total
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

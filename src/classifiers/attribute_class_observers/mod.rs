@@ -4,3 +4,4 @@ pub use nominal_attribute_class_observer::NominalAttributeClassObserver;
 pub mod attribute_class_observer;
 pub mod gaussian_numeric_attribute_class_observer;
 pub mod nominal_attribute_class_observer;
+pub mod null_attribute_class_observer;
