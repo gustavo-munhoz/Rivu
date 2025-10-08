@@ -27,5 +27,5 @@ impl Classifier for OracleClassifier {
             .unwrap_or(2)
     }
 
-    fn train_on_instance(&mut self, instance: Box<dyn Instance>) {}
+    fn train_on_instance(&mut self, instance: &dyn Instance) {}
 }

@@ -1,18 +1,18 @@
 use crate::classifiers::hoeffding_tree::nodes::node::Node;
 use crate::classifiers::hoeffding_tree::nodes::split_node::SplitNode;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
-pub struct FoundNode<'a> {
-    node: Option<&'a dyn Node>,
-    parent: Option<&'a SplitNode>,
-    parent_branch: usize,
+pub struct FoundNode {
+    node: Option<Arc<RwLock<dyn Node>>>,
+    pub parent: Option<Arc<RwLock<dyn Node>>>,
+    parent_branch: isize,
 }
 
-impl<'a> FoundNode<'a> {
+impl FoundNode {
     pub fn new(
-        node: Option<&'a dyn Node>,
-        parent: Option<&'a SplitNode>,
-        parent_branch: usize,
+        node: Option<Arc<RwLock<dyn Node>>>,
+        parent: Option<Arc<RwLock<dyn Node>>>,
+        parent_branch: isize,
     ) -> Self {
         Self {
             node,
@@ -21,15 +21,15 @@ impl<'a> FoundNode<'a> {
         }
     }
 
-    pub fn get_node(&self) -> &Option<&'a dyn Node> {
-        &self.node
+    pub fn get_node(&self) -> Option<Arc<RwLock<dyn Node>>> {
+        self.node.clone()
     }
 
-    pub fn get_parent(&self) -> &Option<&'a SplitNode> {
-        &self.parent
+    pub fn get_parent(&self) -> Option<Arc<RwLock<dyn Node>>> {
+        self.parent.clone()
     }
 
-    pub fn get_parent_branch(&self) -> usize {
+    pub fn get_parent_branch(&self) -> isize {
         self.parent_branch
     }
 }

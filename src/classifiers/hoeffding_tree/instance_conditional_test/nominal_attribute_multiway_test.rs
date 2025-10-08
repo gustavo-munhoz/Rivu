@@ -2,6 +2,7 @@ use crate::classifiers::hoeffding_tree::instance_conditional_test::instance_cond
 use crate::core::instances::Instance;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct NominalAttributeMultiwayTest {
     attribute_index: usize,
 }
@@ -13,7 +14,7 @@ impl NominalAttributeMultiwayTest {
 }
 
 impl InstanceConditionalTest for NominalAttributeMultiwayTest {
-    fn branch_for_instance(&self, instance: Arc<dyn Instance>) -> Option<usize> {
+    fn branch_for_instance(&self, instance: &dyn Instance) -> Option<usize> {
         if instance
             .is_missing_at_index(self.attribute_index)
             .unwrap_or(true)
@@ -24,7 +25,7 @@ impl InstanceConditionalTest for NominalAttributeMultiwayTest {
         Some(instance.value_at_index(self.attribute_index)? as usize)
     }
 
-    fn result_known_for_instance(&self, instance: Arc<dyn Instance>) -> bool {
+    fn result_known_for_instance(&self, instance: &dyn Instance) -> bool {
         self.branch_for_instance(instance).is_some_and(|b| b == 0)
     }
 
@@ -34,5 +35,9 @@ impl InstanceConditionalTest for NominalAttributeMultiwayTest {
 
     fn get_atts_test_depends_on(&self) -> Vec<usize> {
         vec![self.attribute_index]
+    }
+
+    fn clone_box(&self) -> Box<dyn InstanceConditionalTest + Send + Sync> {
+        Box::new(self.clone())
     }
 }
