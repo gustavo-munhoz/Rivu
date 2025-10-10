@@ -5,12 +5,11 @@ config:
 ---
 classDiagram
 
-  %% Instances
+%% Instances
   class InstanceHeader {
     - relation_name: String
-    - attributes: Vec~Attribute~
+    + attributes: Vec~Attribute~
     - class_index: usize
-    - number_of_classes: usize
 
     + new~S~(relation_name: S, attributes: Vec~Attribute~, class_index: usize) Result~InstanceHeader, Error~
     + relation_name() &str
@@ -55,28 +54,33 @@ classDiagram
   class DenseInstance {
     - header: &InstanceHeader
     - values: Vec~f64~
-    - missing: BitVec
     - weight: f64
 
     + new(header: &InstanceHeader, values: Vec~f64~, weight: f64) Result~DenseInstance, Error~
   }
   DenseInstance ..|> Instance
-  DenseInstance "many" --o "1" InstanceHeader 
+  DenseInstance "many" --o "1" InstanceHeader
 
 
-  %% Attributes
+%% Attributes
   class Attribute {
     <<interface>>
 
     + name() &str
+    + as_any() &dyn Any
     + arff_representation() String
   }
   note for NumericAttribute "S: Into<<x>String>"
   Attribute ..|> Serializable
   Attribute ..|> Display
+  Attribute ..|> Any
+  Attribute ..|> Send
+  Attribute ..|> Sync
+
 
   class NumericAttribute {
-    - name: String
+    + name: String
+    + values: Vec~u32~
     + new~S~(name: S) Result~NumericAttribute, Error~
   }
   NumericAttribute ..|> Attribute
@@ -86,7 +90,8 @@ classDiagram
     - values: Vec~String~
     - label_to_index: HashMap~String, usize~
 
-    + new~S~(name: S, values: Vec~String~) Result~NominalAttribute, Error~
+    + new~S~(name: S) NominalAttribute
+    + with_values(name: S, values: Vec~String~, label_to_index: HashMap~String, usize~)
     + get_attribute_values() Vec~String~
     + index_of_value_mut(v: &str) Option~usize~
     + enumerate_values() Iterator~&str~
@@ -110,59 +115,127 @@ classDiagram
   Stream ..> Instance : produces
 
   class ArffFileStream {
-    - input: BufReader~File~
-    - header: InstanceHeader
+    - path: PathBuf
+    - reader: BufReader~File~
+    - header: Arc~InstanceHeader~
+    - data_start_pos: u64
+    - next_line: Option~String~
     - finished: bool
     + new(path: PathBuf, class_index: usize) Result~ArffFileStream, Error~
+    - fill_next_line() Result~&#40&#41, Error~
   }
   ArffFileStream ..|> Stream
 
+  class SeaFunction {
+    <<enumeration>>
+    F1
+    F2
+    F3
+    F4
+
+    + threshold() f64
+  }
+
   class SeaGenerator {
-    - rng: RngCore
+    - seed: u64
+    - rng: StdRng
     - threshold: f64
     - balance_classes: bool
     - next_class_should_be_zero: bool
-    - noise_percentage: f32
-    - header: InstanceHeader
-    - max_instances: Option~usize~
+    - noise_percentage: u32
+    - header: Arc~InstanceHeader~
+    - concept_instances_number: Option~usize~
     - produced: usize
 
-    + new(threshold: f64, balance: bool, noise_percentage: f32, max_instances: Option~usize~, seed: u64) Result~SeaGenerator, Error~
-    + set_threshold(threshold: f64) Result~&#40&#41, Error~
+    + new(function: SeaFunction, balance: bool, noise_percentage: u32, concept_instances_number: Option~usize~, seed: u64) Result~SeaGenerator, Error~
+    - gen_attr() f64
+    - determine_class(a1: f64, a2: f64, a3: f64) u8
+    - maybe_flip_with_noise(cls: u8) u8
   }
   SeaGenerator ..|> Stream
   SeaGenerator "many" --o "1" InstanceHeader
+  SeaGenerator "many" --o "1" SeaFunction
+
+  class AgrawalFunction {
+    <<enumeration>>
+    F1
+    F2
+    F3
+    F4
+    F5
+    F6
+    F7
+    F8
+    F9
+    F10
+    + as_u8() u8
+    + as_index() usize
+  }
+
+  class RawAttrs {
+    + salary: f64
+    + comission: f64
+    + age: i32
+    + elevel: i32
+    + car: i32
+    + zipcode: i32
+    + hvalue: f64
+    + hyears: i32
+    + loan: f64
+  }
 
   class AgrawalGenerator {
-    - rng: RngCore
-    - function_id: u8
+    - seed: u64
+    - rng: StdRng
+    - function: AgrawalFunction
     - balance_classes: bool
     - next_class_should_be_zero: bool
     - perturb_fraction: f64
-    - header: InstanceHeader
+    - header: Arc~InstanceHeader~
     - max_instances: Option~usize~
     - produced: usize
 
-    + new(function_id: u8, balance: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+    + new(function: AgrawalFunction, balance_classes: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+    + new_with_id(function_id: u8, balance_classes: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+    - sample_raw_attributes(rng: Rng) RawAttrs
+    - maybe_perturb(a: RawAttrs)
+    - determine_class(a: RawAttrs) i32
   }
   AgrawalGenerator ..|> Stream
   AgrawalGenerator "many" --o "1" InstanceHeader
+  AgrawalGenerator "many" --o "1" AgrawalFunction
+  AgrawalGenerator "1" --o "1" RawAttrs
+
+  class AssetRule {
+    R1
+    R2
+    R3
+    R4
+    R5
+    + as_u8() u8
+    + as_index() usize
+  }
 
   class AssetNegotiationGenerator {
-    - rng: RngCore
-    - function_id: u8
+    - seed: u64
+    - rng: StdRng
+    - rule: AssetRule
     - noise_percentage: f32
     - balance_classes: bool
     - next_class_should_be_zero: bool
-    - header: InstanceHeader
+    - header: Arc~InstanceHeader~
     - produced: usize
 
-    + new(function_id: u8, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+    + new(rule: AssetRule, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+    + new_with_id(rule_id: u8, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+    - add_noise(cls: usize) usize
+    - sample_indices() [usize]
   }
   AssetNegotiationGenerator ..|> Stream
   AssetNegotiationGenerator "many" --o "1" InstanceHeader
+  AssetNegotiationGenerator "many" --o "1" AssetRule
 
-direction LR
+  direction LR
 
   class PerformanceEvaluator {
     <<interface>>
@@ -170,6 +243,14 @@ direction LR
     + add_result(example: &dyn Instance, class_votes: Vec~f64~)
     + performance() Vec~Measurement~
   }
+
+  class PerformanceEvaluatorExt {
+    - metrics(names: I) Vec~(String, Option~f64~)~
+    - metric(name: &str) Option~f64~
+  }
+  note for InstanceHeader "I: IntoIterator<Item = &'a str>"
+
+  PerformanceEvaluator ..|> PerformanceEvaluatorExt
 
   class Measurement {
     - name: String
@@ -210,12 +291,12 @@ direction LR
   BasicClassificationEvaluator ..|> PerformanceEvaluator
   PerformanceEvaluator ..> Measurement : produces
 
-direction LR
+  direction LR
 
   class Classifier {
     <<interface>>
-    + get_votes_for_instance(inst: Instance) Option~Vec~usize~~
-    + get_prediction_for_instance(inst: Instance) Option~Vec~usize~~
+    + get_votes_for_instance(instance: &dyn Instance) Vec~f64~
+    + get_prediction_for_instance(instance: &dyn Instance) Vec~usize~
     + set_model_context(header: InstanceHeader)
     + train_on_instance(inst: Instance)
     + get_model_measurements() Vec~Measurement~
@@ -224,19 +305,36 @@ direction LR
 
   class AttributeClassObserver {
     <<interface>>
-    + observe_attribute_class(att_val: usize, class_val: i32, weight: usize)
-    + probability_of_attribute_value_given_class(att_val: usize, class_val: i32) usize
+    + observe_attribute_class(att_val: f64, class_val: uzize, weight: usize)
+    + probability_of_attribute_value_given_class(att_val: f64, class_val: usize) Option~f64~
   }
 
   class LearningNode {
     <<interface>>
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+    + learn_from_instance(instance: Arc<dyn Instance>, hoeffding_tree: &HoeffdingTree)
   }
 
   class HoeffdingTree {
-    - tree_root: Node
-    - decision_node_count: i32
-    - split_confidence: usize
+    - tree_root: Option<Arc<RwLock<dyn Node>>>
+    - decision_node_count: usize,
+    - active_leaf_node_count: usize,
+    - inactive_leaf_node_count: usize,
+    - growth_allowed: bool,
+    - header: Option<Arc<InstanceHeader>>,
+    - leaf_prediction_option: LeafPredictionOption,
+    - nb_threshold_option: Option<f64>,
+    - grace_period_option: usize,
+    - split_criterion_option: Box<dyn SplitCriterion + Send + Sync>,
+    - no_pre_prune_option: bool,
+    - binary_splits_option: bool,
+    - split_confidence_option: f64,
+    - tie_threshold_option: f64,
+    - remove_poor_atts_option: bool,
+    - active_leaf_byte_size_estimate: f64,
+    - inactive_leaf_byte_size_estimate: f64,
+    - byte_size_estimate_overhead_fraction: f64,
+    - max_byte_size_option: f64,
+    - stop_mem_management_option: bool,
     + new_learning_node(initial_class_observations: Vec~usize~) Node
     + train_on_instance_impl(inst: Instance)
     + hoeffding_bound(range: usize, confidence: usize, n: usize) usize
@@ -249,10 +347,13 @@ direction LR
   class NaiveBayes {
     - observed_class_distribution: Vec~usize~
     - attribute_observers: Vec~AttributeClassObserver~
+    - ensure_observers_length(num_model_atts: usize)
+    - new_nominal_observer() Box~dyn AttributeClassObserver~
+    - new_numeric_observer() Box~dyn AttributeClassObserver~
+    - model_att_index_to_instance_att_index(model_idx: usize, class_idx: usize) usize
     + train_on_instance(inst: Instance)
     + get_votes_for_instance(inst: Instance) Vec~usize~
-    + nb_prediction(inst: Instance, class_dist: Vec~usize~, observers: Vec~AttributeClassObserver~) Option~Vec~usize~~
-    + nb_prediction_log(inst: Instance, class_dist: Vec~usize~, obs1: Vec~AttributeClassObserver~, obs2: Vec~AttributeClassObserver~) Vec~usize~
+    + do_naive_bayes_prediction(instance: Instance, observed_class_distribution: Vec~f64~, attribute_observers: Vec~Option~Box~dyn AttributeClassObserver~~~) Vec~f64~
     + new() NaiveBayes
   }
 
@@ -261,44 +362,66 @@ direction LR
     - class_distribution: Vec~usize~
     + weight_seen() usize
     + is_leaf() bool
+    + get_class_votes(instance: &dyn Instance, hoeffding_tree: &HoeffdingTree) Vec~f64~
+    + get_observed_class_distribution() &Vec~f64~
+    + get_observed_class_distribution_at_leaves_reachable_through_this_node() Vec~f64~
     + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
   }
 
   class SplitNode {
     - split_test: InstanceConditionalTest
     - children: Vec~Node~
-    + set_child(idx: i32, child: Node)
-    + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
+    - add_in_place(dst: Vec~usize~, src: Vec~usize~)
+    - instance_child_index(instance: Arc~dyn Instance~)
+    + set_child(index: usize, child: Arc~dyn Node~)
+    + get_child(index: usize) Option~&Arc~dyn Node~~
+    + new(split_test: Box~dyn InstanceConditionalTest~, observed_class_distribution: Vec~f64~, initial_children_len: Option~usize~) SplitNode
   }
 
   class ActiveLearningNode {
     - weight_seen_at_last_split_eval: usize
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+    + get_weight_seen() f64
+    + get_weight_seen_at_last_split_evaluation() f64
+    + set_weight_seen_at_last_split_evaluation(weight: f64)
   }
 
   class InactiveLearningNode {
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+    - observed_class_distribution: Vec~f64~
+    + new(observed_class_distribution: Vec~f64~) InactiveLearningNode
   }
 
   class LearningNodeNB {
-    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+    + new(observed_class_distribution: Vec~f64~) LearningNodeNB
+    + get_weight_seen() f64
+    + get_weight_seen_at_last_split_evaluation() f64
+    + set_weight_seen_at_last_split_evaluation(weight: f64)
   }
 
   class LearningNodeNBAdaptive {
-    - mc_correct_weight: usize
-    - nb_correct_weight: usize
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
-    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+    - observed_class_distribution: Vec~f64~
+    - weight_seen_at_last_split_evaluation: f64
+    - attribute_observers: Vec~Option~Box~dyn AttributeClassObserver~~~
+    - is_initialized: bool
+    - mc_correct_weight: f64
+    - nb_correct_weight: f64
+    + get_weight_seen() f64
+    + get_weight_seen_at_last_split_evaluation() f64
+    + set_weight_seen_at_last_split_evaluation(weight: f64)
+    - max_index(dist: Vec~f64~) Option~usize~
+    - super_learn_from_instance(instance: Arc~dyn Instance~, hoeffding_tree: &HoeffdingTree)
   }
 
   class InstanceConditionalTest {
-    + branch_for_instance(inst: Instance) Option~i32~
+    - branch_for_instance(instance: Arc~dyn Instance~) Option~i32~
+    - result_known_for_instance(instance: Arc~dyn Instance~) bool
+    - max_branches() usize
+    - get_atts_test_depends_on() Vec~usize~
   }
 
   class FoundNode {
-    - node: Node
-    - parent: SplitNode
-    - parent_branch: i32
+    - node: Option~Node~
+    - parent: Option~SplitNode~
+    - parent_branch: usize
   }
 
   HoeffdingTree ..|> Classifier
@@ -317,7 +440,7 @@ direction LR
   FoundNode     --> SplitNode
   NaiveBayes    --> AttributeClassObserver
 
-direction LR 
+  direction LR
 
   class Snapshot {
     + instances_seen: u64
@@ -325,6 +448,7 @@ direction LR
     + kappa: f64
     + ram_hours: f64
     + seconds: f64
+    + extras: BTree~String, f64~
   }
   Snapshot ..|> Display
 
@@ -332,8 +456,12 @@ direction LR
     - entries: Vec~Snapshot~
     + push(snap: Snapshot)
     + len() usize
+    + iter() IterMut~'_, Snapshot~
+    + as_slice() &[Snapshot]
     + latest() Option~Snapshot~
-    + export(path, fmt: CurveFormat)
+    + export(path, fmt: CurveFormat) Result~&#40&#41, Error~
+    - export_with_delimiter(path, delimiter: char) Result~&#40&#41, Error~
+    - export_json(path) Resul~&#40&#41, Error~
   }
 
   class CurveFormat {
@@ -358,9 +486,13 @@ direction LR
     - processed: u64
     - start_time: Instant
     - last_sample_time: Instant
+    - last_mem_time: Instant
     - ram_hours: f64
 
+    - progress_tx: Option~Sender~Snapshot~~
+
     + new(learner: Classifier, stream: Stream, evaluator: PrequentialEvaluator, max_instances: Option~u64~, max_seconds: Option~u64~, sample_frequency: u64, mem_check_frequency: u64) Result~PrequentialEvaluator, Error~
+    + with_progress(tx: Sender~Snapshot~) PrequentialEvaluator
     + run()
     + curve() &LearningCurve
   }

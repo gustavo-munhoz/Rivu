@@ -3,8 +3,8 @@ direction LR
 
   class Classifier {
     <<interface>>
-    + get_votes_for_instance(inst: Instance) Option~Vec~usize~~
-    + get_prediction_for_instance(inst: Instance) Option~Vec~usize~~
+    + get_votes_for_instance(instance: &dyn Instance) Vec~f64~
+    + get_prediction_for_instance(instance: &dyn Instance) Vec~usize~
     + set_model_context(header: InstanceHeader)
     + train_on_instance(inst: Instance)
     + get_model_measurements() Vec~Measurement~
@@ -13,19 +13,36 @@ direction LR
 
   class AttributeClassObserver {
     <<interface>>
-    + observe_attribute_class(att_val: usize, class_val: i32, weight: usize)
-    + probability_of_attribute_value_given_class(att_val: usize, class_val: i32) usize
+    + observe_attribute_class(att_val: f64, class_val: uzize, weight: usize)
+    + probability_of_attribute_value_given_class(att_val: f64, class_val: usize) Option~f64~
   }
 
   class LearningNode {
     <<interface>>
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+    + learn_from_instance(instance: Arc<dyn Instance>, hoeffding_tree: &HoeffdingTree)
   }
 
   class HoeffdingTree {
-    - tree_root: Node
-    - decision_node_count: i32
-    - split_confidence: usize
+    - tree_root: Option<Arc<RwLock<dyn Node>>>
+    - decision_node_count: usize,
+    - active_leaf_node_count: usize,
+    - inactive_leaf_node_count: usize,
+    - growth_allowed: bool,
+    - header: Option<Arc<InstanceHeader>>,
+    - leaf_prediction_option: LeafPredictionOption,
+    - nb_threshold_option: Option<f64>,
+    - grace_period_option: usize,
+    - split_criterion_option: Box<dyn SplitCriterion + Send + Sync>,
+    - no_pre_prune_option: bool,
+    - binary_splits_option: bool,
+    - split_confidence_option: f64,
+    - tie_threshold_option: f64,
+    - remove_poor_atts_option: bool,
+    - active_leaf_byte_size_estimate: f64,
+    - inactive_leaf_byte_size_estimate: f64,
+    - byte_size_estimate_overhead_fraction: f64,
+    - max_byte_size_option: f64,
+    - stop_mem_management_option: bool,
     + new_learning_node(initial_class_observations: Vec~usize~) Node
     + train_on_instance_impl(inst: Instance)
     + hoeffding_bound(range: usize, confidence: usize, n: usize) usize
@@ -38,10 +55,13 @@ direction LR
   class NaiveBayes {
     - observed_class_distribution: Vec~usize~
     - attribute_observers: Vec~AttributeClassObserver~
+    - ensure_observers_length(num_model_atts: usize)
+    - new_nominal_observer() Box~dyn AttributeClassObserver~
+    - new_numeric_observer() Box~dyn AttributeClassObserver~
+    - model_att_index_to_instance_att_index(model_idx: usize, class_idx: usize) usize
     + train_on_instance(inst: Instance)
     + get_votes_for_instance(inst: Instance) Vec~usize~
-    + nb_prediction(inst: Instance, class_dist: Vec~usize~, observers: Vec~AttributeClassObserver~) Option~Vec~usize~~
-    + nb_prediction_log(inst: Instance, class_dist: Vec~usize~, obs1: Vec~AttributeClassObserver~, obs2: Vec~AttributeClassObserver~) Vec~usize~
+    + do_naive_bayes_prediction(instance: Instance, observed_class_distribution: Vec~f64~, attribute_observers: Vec~Option~Box~dyn AttributeClassObserver~~~) Vec~f64~
     + new() NaiveBayes
   }
 
@@ -50,44 +70,66 @@ direction LR
     - class_distribution: Vec~usize~
     + weight_seen() usize
     + is_leaf() bool
+    + get_class_votes(instance: &dyn Instance, hoeffding_tree: &HoeffdingTree) Vec~f64~
+    + get_observed_class_distribution() &Vec~f64~
+    + get_observed_class_distribution_at_leaves_reachable_through_this_node() Vec~f64~
     + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
   }
 
   class SplitNode {
     - split_test: InstanceConditionalTest
     - children: Vec~Node~
-    + set_child(idx: i32, child: Node)
-    + filter_instance_to_leaf(inst: Instance, parent: SplitNode, parent_branch: i32) FoundNode
+    - add_in_place(dst: Vec~usize~, src: Vec~usize~)
+    - instance_child_index(instance: Arc~dyn Instance~)
+    + set_child(index: usize, child: Arc~dyn Node~)
+    + get_child(index: usize) Option~&Arc~dyn Node~~
+    + new(split_test: Box~dyn InstanceConditionalTest~, observed_class_distribution: Vec~f64~, initial_children_len: Option~usize~) SplitNode
   }
 
   class ActiveLearningNode {
     - weight_seen_at_last_split_eval: usize
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+    + get_weight_seen() f64
+    + get_weight_seen_at_last_split_evaluation() f64
+    + set_weight_seen_at_last_split_evaluation(weight: f64)
   }
 
   class InactiveLearningNode {
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
+      - observed_class_distribution: Vec~f64~
+      + new(observed_class_distribution: Vec~f64~) InactiveLearningNode
   }
 
   class LearningNodeNB {
-    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+    + new(observed_class_distribution: Vec~f64~) LearningNodeNB
+    + get_weight_seen() f64
+    + get_weight_seen_at_last_split_evaluation() f64
+    + set_weight_seen_at_last_split_evaluation(weight: f64)
   }
 
   class LearningNodeNBAdaptive {
-    - mc_correct_weight: usize
-    - nb_correct_weight: usize
-    + learn_from_instance(inst: Instance, ht: HoeffdingTree)
-    + get_class_votes(inst: Instance, ht: HoeffdingTree) Vec~usize~
+    - observed_class_distribution: Vec~f64~
+    - weight_seen_at_last_split_evaluation: f64
+    - attribute_observers: Vec~Option~Box~dyn AttributeClassObserver~~~
+    - is_initialized: bool
+    - mc_correct_weight: f64
+    - nb_correct_weight: f64
+    + get_weight_seen() f64
+    + get_weight_seen_at_last_split_evaluation() f64
+    + set_weight_seen_at_last_split_evaluation(weight: f64) 
+    - max_index(dist: Vec~f64~) Option~usize~
+    - super_learn_from_instance(instance: Arc~dyn Instance~, hoeffding_tree: &HoeffdingTree)
   }
 
   class InstanceConditionalTest {
-    + branch_for_instance(inst: Instance) Option~i32~
+    - branch_for_instance(instance: Arc~dyn Instance~) Option~i32~
+    - result_known_for_instance(instance: Arc~dyn Instance~) bool
+    - max_branches() usize
+    - get_atts_test_depends_on() Vec~usize~
   }
 
   class FoundNode {
-    - node: Node
-    - parent: SplitNode
-    - parent_branch: i32
+    - node: Option~Node~
+    - parent: Option~SplitNode~
+    - parent_branch: usize
   }
 
   HoeffdingTree ..|> Classifier

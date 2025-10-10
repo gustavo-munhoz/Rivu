@@ -11,54 +11,122 @@ classDiagram
   Stream ..> Instance : produces
 
   class ArffFileStream {
-    - input: BufReader~File~
-    - header: InstanceHeader
+    - path: PathBuf
+    - reader: BufReader~File~
+    - header: Arc~InstanceHeader~
+    - data_start_pos: u64
+    - next_line: Option~String~
     - finished: bool
     + new(path: PathBuf, class_index: usize) Result~ArffFileStream, Error~
+    - fill_next_line() Result~&#40&#41, Error~
   }
   ArffFileStream ..|> Stream
 
+  class SeaFunction {
+    <<enumeration>>
+    F1
+    F2
+    F3
+    F4
+
+    + threshold() f64
+  }
+
   class SeaGenerator {
-    - rng: RngCore
+    - seed: u64
+    - rng: StdRng
     - threshold: f64
     - balance_classes: bool
     - next_class_should_be_zero: bool
-    - noise_percentage: f32
-    - header: InstanceHeader
-    - max_instances: Option~usize~
+    - noise_percentage: u32
+    - header: Arc~InstanceHeader~
+    - concept_instances_number: Option~usize~
     - produced: usize
 
-    + new(threshold: f64, balance: bool, noise_percentage: f32, max_instances: Option~usize~, seed: u64) Result~SeaGenerator, Error~
-    + set_threshold(threshold: f64) Result~&#40&#41, Error~
+    + new(function: SeaFunction, balance: bool, noise_percentage: u32, concept_instances_number: Option~usize~, seed: u64) Result~SeaGenerator, Error~
+    - gen_attr() f64
+    - determine_class(a1: f64, a2: f64, a3: f64) u8
+    - maybe_flip_with_noise(cls: u8) u8
   }
   SeaGenerator ..|> Stream
   SeaGenerator "many" --o "1" InstanceHeader
+  SeaGenerator "many" --o "1" SeaFunction
+
+  class AgrawalFunction {
+      <<enumeration>>
+      F1
+      F2
+      F3
+      F4
+      F5
+      F6
+      F7
+      F8
+      F9
+      F10
+      + as_u8() u8
+      + as_index() usize
+  }
+
+  class RawAttrs {
+    + salary: f64
+    + comission: f64
+    + age: i32
+    + elevel: i32
+    + car: i32
+    + zipcode: i32
+    + hvalue: f64
+    + hyears: i32
+    + loan: f64
+  }
 
   class AgrawalGenerator {
-    - rng: RngCore
-    - function_id: u8
+    - seed: u64
+    - rng: StdRng
+    - function: AgrawalFunction
     - balance_classes: bool
     - next_class_should_be_zero: bool
     - perturb_fraction: f64
-    - header: InstanceHeader
+    - header: Arc~InstanceHeader~
     - max_instances: Option~usize~
     - produced: usize
 
-    + new(function_id: u8, balance: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+    + new(function: AgrawalFunction, balance_classes: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+    + new_with_id(function_id: u8, balance_classes: bool, perturb_fraction: f64, max_instances: Option~usize~, seed: u64) Result~AgrawalGenerator, Error~
+    - sample_raw_attributes(rng: Rng) RawAttrs
+    - maybe_perturb(a: RawAttrs)
+    - determine_class(a: RawAttrs) i32
   }
   AgrawalGenerator ..|> Stream
   AgrawalGenerator "many" --o "1" InstanceHeader
+  AgrawalGenerator "many" --o "1" AgrawalFunction
+  AgrawalGenerator "1" --o "1" RawAttrs
+
+  class AssetRule {
+    R1
+    R2
+    R3
+    R4
+    R5
+    + as_u8() u8
+    + as_index() usize
+  }
 
   class AssetNegotiationGenerator {
-    - rng: RngCore
-    - function_id: u8
+    - seed: u64
+    - rng: StdRng
+    - rule: AssetRule
     - noise_percentage: f32
     - balance_classes: bool
     - next_class_should_be_zero: bool
-    - header: InstanceHeader
+    - header: Arc~InstanceHeader~
     - produced: usize
 
-    + new(function_id: u8, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+    + new(rule: AssetRule, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+    + new_with_id(rule_id: u8, balance: bool, noise_percentage: f32, seed: u64) Result ~AssetNegotiationGenerator, Error~
+    - add_noise(cls: usize) usize
+    - sample_indices() [usize]
   }
   AssetNegotiationGenerator ..|> Stream
   AssetNegotiationGenerator "many" --o "1" InstanceHeader
+  AssetNegotiationGenerator "many" --o "1" AssetRule
