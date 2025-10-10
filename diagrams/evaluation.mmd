@@ -8,6 +8,14 @@ direction LR
     + performance() Vec~Measurement~
   }
 
+  class PerformanceEvaluatorExt {
+      - metrics(names: I) Vec~(String, Option~f64~)~
+      - metric(name: &str) Option~f64~
+  }
+  note for InstanceHeader "I: IntoIterator<Item = &'a str>"
+
+  PerformanceEvaluator ..|> PerformanceEvaluatorExt
+
   class Measurement {
     - name: String
     - value: f64
