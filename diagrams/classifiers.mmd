@@ -15,11 +15,54 @@ direction LR
     <<interface>>
     + observe_attribute_class(att_val: f64, class_val: uzize, weight: usize)
     + probability_of_attribute_value_given_class(att_val: f64, class_val: usize) Option~f64~
+    + get_best_evaluated_split_suggestion(criterion: &dyn SplitCriterion, pre_split_dist: &Vec~f64~, att_index: usize, binary_only: bool) Option~AttributeSplitSuggestion~
+  }
+
+  class GaussianNumericAttributeClassObserver {
+      - min_value_observed_per_class: Vec~f64~
+      - max_value_observed_per_class: Vec~f64~
+      - attribute_value_distribution_per_class: Vec~GaussianEstimator~
+      - num_bins_option: usize
+      + get_split_point_suggestions() Vec~f64~
+      + get_class_dists_resulting_from_binary_split(split_value: f64) Vec~Vec~f64~~
+      + observe_attribute_class(att_val: f64, class_val: usize, weight: usize)
+      + probability_of_attribute_value_given_class(att_val: f64, class_val: usize) Option~f64~
+      + get_best_evaluated_split_suggestion(criterion: &dyn SplitCriterion, pre_split_dist: &Vec~f64~, att_index: usize, binary_only: bool) Option~AttributeSplitSuggestion~
+  }
+
+  class NominalAttributeClassObserver {
+      - total_weight_observed: f64
+      - missing_weight_observed: f64
+      - attribute_value_distribution_per_class: Vec~Vec~f64~~
+      + get_max_att_vals_observed() usize
+      + get_class_dists_resulting_from_multiway_split(max_att_vals: usize) Vec~Vec~f64~~
+      + get_class_resulting_from_binary_split(val_index: usize) Vec~Vec~f64~~
+      + observe_attribute_class(att_val: f64, class_val: usize, weight: usize)
+      + probability_of_attribute_value_given_class(att_val: f64, class_val: usize) Option~f64~
+      + get_best_evaluated_split_suggestion(criterion: &dyn SplitCriterion, pre_split_dist: &Vec~f64~, att_index: usize, binary_only: bool) Option~AttributeSplitSuggestion~
+  }
+
+  class NullAttributeClassObserver {
+      + observe_attribute_class(att_val: f64, class_val: usize, weight: usize)
+      + probability_of_attribute_value_given_class(att_val: f64, class_val: usize) Option~f64~
+      + get_best_evaluated_split_suggestion(criterion: &dyn SplitCriterion, pre_split_dist: &Vec~f64~, att_index: usize, binary_only: bool) Option~AttributeSplitSuggestion~
   }
 
   class LearningNode {
     <<interface>>
     + learn_from_instance(instance: Arc<dyn Instance>, hoeffding_tree: &HoeffdingTree)
+  }
+
+  class SplitCriterion {
+      <<interface>>
+      + get_range_of_merit(pre_split_distribution: &Vec~f64~) f64
+      + get_merit_of_split(pre_split_distribution: &Vec~f64~, post_split_distributions: &Vec~Vec~f64~~) f64
+  }
+
+  class GiniSplitSuggestion {
+      - compute_gini(distribution: &Vec~f64~, distribution_sum_of_weights: f64) f64
+      + get_range_of_merit(pre_split_distribution: &Vec~f64~) f64
+      + get_merit_of_split(pre_split_distribution: &Vec~f64~, post_split
   }
 
   class HoeffdingTree {
@@ -48,7 +91,16 @@ direction LR
     + hoeffding_bound(range: usize, confidence: usize, n: usize) usize
     + attempt_to_split(node: ActiveLearningNode, parent: SplitNode, parent_idx: i32) Result~&#40&#41, Error~
     + get_votes_for_instance(inst: Instance) Vec~usize~
-    + deactivate_learning_node(to_deactivate: ActiveLearningNode, parent: SplitNode, parent_branch: i32)
+    + deactivate_learning_node(to_deactivate: Arc~RwLock~dyn Node~~, parent: Arc~RwLock~dyn Node~~, parent_branch: isize)
+    + activate_learning_node(to_activate: Arc~RwLock~dyn Node~~, parent: Arc~RwLock~dyn Node~, parent_branch: isize)
+    + new_nominal_class_observer() Box~dyn AttributeClassObserver~
+    + new_numeric_class_observer() Box~dyn AttributeClassObserver~
+    + compute_hoeffding_bound(range: f64, confidence: f64, n: f64) f64
+    + new_split_node(split_test: Box~dyn InstanceConditionalTest~, class_observations: Vec~f64~, size: usize) Arc~RwLock~dyn Node~~
+    + find_learning_nodes() Vec~FoundNode~
+    + find_learning_node_rec(node: Arc~RwLock~dyn Node~~, parent: Option~Arc~RwLock~dyn Node~~, parent_branch: isize, found: &mut Vec~FoundNode~)
+    + enforce_tracker_limit()
+    + extract_promise(found: FoundNode) f64
     + new() HoeffdingTree
   }
 
@@ -120,10 +172,41 @@ direction LR
   }
 
   class InstanceConditionalTest {
+      <<interface>>
     - branch_for_instance(instance: Arc~dyn Instance~) Option~i32~
     - result_known_for_instance(instance: Arc~dyn Instance~) bool
     - max_branches() usize
     - get_atts_test_depends_on() Vec~usize~
+  }
+
+  class NominalAttributeBinaryTest {
+    - att_index: usize
+    - att_value: f64
+    + branch_for_instance(instance: Arc~dyn Instance~) Option~i32~
+    + result_known_for_instance(instance: Arc~dyn Instance~) bool
+    + max_branches() usize
+    + get_atts_test_depends_on() Vec~usize~
+    + new(att_index: usize, att_value: f64) NominalAttributeBinaryTest
+  }
+
+  class NominalAttributeMultiwayTest {
+    - att_index: usize
+    + branch_for_instance(instance: Arc~dyn Instance~) Option~i32~
+    + result_known_for_instance(instance: Arc~dyn Instance~) bool
+    + max_branches() usize
+    + get_atts_test_depends_on() Vec~usize~
+    + new(att_index: usize) NominalAttributeMultiwayTest
+  }
+
+  class NumericAttributeBinaryTest {
+    - att_index: usize
+    - att_value: f64
+    - equal_passes_test: bool
+    + branch_for_instance(instance: Arc~dyn Instance~) Option~i32~
+    + result_known_for_instance(instance: Arc~dyn Instance~) bool
+    + max_branches() usize
+    + get_atts_test_depends_on() Vec~usize~
+    + new(att_index: usize, att_value: f64, equal_passes_test: bool) NumericAttributeBinaryTest
   }
 
   class FoundNode {
@@ -147,3 +230,15 @@ direction LR
   FoundNode     --> Node
   FoundNode     --> SplitNode
   NaiveBayes    --> AttributeClassObserver
+  HoeffdingTree --> AttributeClassObserver
+
+  GiniSplitSuggestion ..|> SplitCriterion
+  SplitCriterion      <|-- HoeffdingTree
+
+  NominalAttributeBinaryTest ..|> InstanceConditionalTest
+  NominalAttributeMultiwayTest ..|> InstanceConditionalTest
+  NumericAttributeBinaryTest ..|> InstanceConditionalTest
+
+  AttributeClassObserver <|.. GaussianNumericAttributeClassObserver
+  AttributeClassObserver <|.. NominalAttributeClassObserver
+  AttributeClassObserver <|.. NullAttributeClassObserver
