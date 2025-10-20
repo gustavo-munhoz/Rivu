@@ -50,7 +50,7 @@ impl Classifier for TrainSpyClassifier {
             .unwrap_or(2);
     }
 
-    fn train_on_instance(&mut self, _inst: Box<dyn Instance>) {
+    fn train_on_instance(&mut self, _inst: &dyn Instance) {
         self.count.fetch_add(1, Ordering::Relaxed);
     }
 }

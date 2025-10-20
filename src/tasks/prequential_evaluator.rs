@@ -110,7 +110,7 @@ impl PrequentialEvaluator {
 
             self.evaluator.add_result(&*instance, votes);
 
-            self.learner.train_on_instance(instance);
+            self.learner.train_on_instance(instance.as_ref());
 
             if self.processed % self.mem_check_frequency == 0 {
                 self.bump_ram_hours();

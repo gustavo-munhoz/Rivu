@@ -1,7 +1,7 @@
 use crate::classifiers::hoeffding_tree::instance_conditional_test::instance_conditional_test::InstanceConditionalTest;
 use crate::core::instances::Instance;
-use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct NominalAttributeBinaryTest {
     attribute_index: usize,
     attribute_value: usize,
@@ -17,7 +17,7 @@ impl NominalAttributeBinaryTest {
 }
 
 impl InstanceConditionalTest for NominalAttributeBinaryTest {
-    fn branch_for_instance(&self, instance: Arc<dyn Instance>) -> Option<usize> {
+    fn branch_for_instance(&self, instance: &dyn Instance) -> Option<usize> {
         let index = if self.attribute_index < instance.class_index() {
             self.attribute_index
         } else {
@@ -33,7 +33,7 @@ impl InstanceConditionalTest for NominalAttributeBinaryTest {
         Some((value as usize != self.attribute_value) as usize)
     }
 
-    fn result_known_for_instance(&self, instance: Arc<dyn Instance>) -> bool {
+    fn result_known_for_instance(&self, instance: &dyn Instance) -> bool {
         self.branch_for_instance(instance).is_some_and(|b| b == 0)
     }
 
@@ -43,5 +43,13 @@ impl InstanceConditionalTest for NominalAttributeBinaryTest {
 
     fn get_atts_test_depends_on(&self) -> Vec<usize> {
         vec![self.attribute_index]
+    }
+
+    fn calc_byte_size(&self) -> usize {
+        size_of::<Self>()
+    }
+
+    fn clone_box(&self) -> Box<dyn InstanceConditionalTest> {
+        Box::new(self.clone())
     }
 }
