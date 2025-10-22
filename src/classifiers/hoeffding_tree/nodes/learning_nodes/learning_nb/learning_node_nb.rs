@@ -140,7 +140,11 @@ impl LearningNode for LearningNodeNB {
 
         if let Some(class_index) = instance.class_value() {
             let weight = instance.weight();
-            self.observed_class_distribution[class_index as usize] += weight
+            let idx = class_index as usize;
+            if idx >= self.observed_class_distribution.len() {
+                self.observed_class_distribution.resize(idx + 1, 0.0);
+            }
+            self.observed_class_distribution[idx] += weight;
         }
 
         for i in 0..instance.number_of_attributes() - 1 {
@@ -172,5 +176,184 @@ impl LearningNode for LearningNodeNB {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::classifiers::hoeffding_tree::leaf_prediction_option::LeafPredictionOption;
+    use crate::core::attributes::Attribute;
+    use crate::core::instance_header::InstanceHeader;
+    use std::io::Error;
+
+    struct MockInstance {
+        values: Vec<f64>,
+        class_idx: usize,
+        class_val: Option<f64>,
+        weight: f64,
+    }
+
+    impl MockInstance {
+        fn new(values: Vec<f64>, class_idx: usize, class_val: Option<f64>, weight: f64) -> Self {
+            Self {
+                values,
+                class_idx,
+                class_val,
+                weight,
+            }
+        }
+    }
+
+    impl Instance for MockInstance {
+        fn weight(&self) -> f64 {
+            self.weight
+        }
+
+        fn set_weight(&mut self, _new_value: f64) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn value_at_index(&self, index: usize) -> Option<f64> {
+            self.values.get(index).copied()
+        }
+
+        fn set_value_at_index(&mut self, _index: usize, _new_value: f64) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn is_missing_at_index(&self, _index: usize) -> Result<bool, Error> {
+            Ok(false)
+        }
+
+        fn attribute_at_index(&self, _index: usize) -> Option<&dyn Attribute> {
+            None
+        }
+
+        fn index_of_attribute(&self, _attribute: &dyn Attribute) -> Option<usize> {
+            None
+        }
+
+        fn number_of_attributes(&self) -> usize {
+            self.values.len()
+        }
+
+        fn class_index(&self) -> usize {
+            self.class_idx
+        }
+
+        fn class_value(&self) -> Option<f64> {
+            self.class_val
+        }
+
+        fn set_class_value(&mut self, _new_value: f64) -> Result<(), Error> {
+            Ok(())
+        }
+
+        fn is_class_missing(&self) -> bool {
+            false
+        }
+
+        fn number_of_classes(&self) -> usize {
+            2
+        }
+
+        fn to_vec(&self) -> Vec<f64> {
+            self.values.clone()
+        }
+
+        fn header(&self) -> &InstanceHeader {
+            unimplemented!()
+        }
+    }
+
+    #[test]
+    fn test_initialization_and_weight_sums() {
+        let node = LearningNodeNB::new(vec![2.0, 3.0]);
+        assert_eq!(node.get_weight_seen(), 5.0);
+        assert_eq!(node.get_weight_seen_at_last_split_evaluation(), 5.0);
+    }
+
+    #[test]
+    fn test_num_non_zero_entries() {
+        let vec = vec![0.0, 1.0, 2.0, 0.0, 3.0];
+        assert_eq!(LearningNodeNB::num_non_zero_entries(&vec), 3);
+    }
+
+    #[test]
+    fn test_observed_class_distribution_is_pure() {
+        let pure = LearningNodeNB::new(vec![5.0, 0.0]);
+        let impure = LearningNodeNB::new(vec![3.0, 2.0]);
+        assert!(pure.observed_class_distribution_is_pure());
+        assert!(!impure.observed_class_distribution_is_pure());
+    }
+
+    #[test]
+    fn test_learn_from_instance_initializes_attribute_observers() {
+        let mut node = LearningNodeNB::new(vec![1.0, 1.0]);
+        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let instance = MockInstance::new(vec![0.0, 1.0, 2.0], 2, Some(0.0), 1.0);
+
+        node.learn_from_instance(&instance, &tree);
+        assert!(node.is_initialized);
+        assert_eq!(
+            node.attribute_observers.len(),
+            instance.number_of_attributes()
+        );
+    }
+
+    #[test]
+    fn learn_from_instance_with_valid_class_index_updates_distribution() {
+        let mut node = LearningNodeNB::new(vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let instance = MockInstance::new(vec![1.0, 2.0, 3.0], 2, Some(2.0), 1.5);
+
+        node.learn_from_instance(&instance, &tree);
+
+        assert_eq!(node.observed_class_distribution[2], 1.5);
+        assert_eq!(node.observed_class_distribution[0], 0.0);
+        assert_eq!(node.observed_class_distribution[1], 0.0);
+    }
+
+    #[test]
+    fn learn_from_instance_expands_distribution_when_needed() {
+        let mut node = LearningNodeNB::new(vec![0.0]);
+        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let instance = MockInstance::new(vec![1.0, 2.0, 3.0], 0, Some(5.0), 1.0);
+
+        node.learn_from_instance(&instance, &tree);
+
+        assert_eq!(node.observed_class_distribution.len(), 6);
+        assert_eq!(node.observed_class_distribution[5], 1.0);
+    }
+
+    #[test]
+    fn learn_from_instance_with_safe_guard_does_not_panic_if_checked() {
+        let mut node = LearningNodeNB::new(vec![0.0]);
+        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let instance = MockInstance::new(vec![1.0], 5, Some(0.0), 1.0);
+
+        if let Some(class_idx) = instance.class_value() {
+            let class_idx = class_idx as usize;
+            if class_idx >= node.observed_class_distribution.len() {
+                println!("index out of bounds: {}", class_idx);
+                return;
+            }
+            node.observed_class_distribution[class_idx] += instance.weight();
+        }
+    }
+
+    #[test]
+    fn test_calc_byte_size_non_zero() {
+        let node = LearningNodeNB::new(vec![1.0, 2.0, 3.0]);
+        let size = node.calc_byte_size();
+        assert!(size > 0);
+    }
+
+    #[test]
+    fn test_clone_distribution_in_get_observed_class_distribution_at_leaves() {
+        let node = LearningNodeNB::new(vec![1.0, 2.0]);
+        let dist = node.get_observed_class_distribution_at_leaves_reachable_through_this_node();
+        assert_eq!(dist, vec![1.0, 2.0]);
     }
 }

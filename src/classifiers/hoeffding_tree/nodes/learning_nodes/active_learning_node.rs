@@ -182,7 +182,11 @@ impl LearningNode for ActiveLearningNode {
 
         if let Some(class_index) = instance.class_value() {
             let weight = instance.weight();
-            self.observed_class_distribution[class_index as usize] += weight
+            let idx = class_index as usize;
+            if idx >= self.observed_class_distribution.len() {
+                self.observed_class_distribution.resize(idx + 1, 0.0);
+            }
+            self.observed_class_distribution[idx] += weight;
         }
 
         for i in 0..instance.number_of_attributes() - 1 {
