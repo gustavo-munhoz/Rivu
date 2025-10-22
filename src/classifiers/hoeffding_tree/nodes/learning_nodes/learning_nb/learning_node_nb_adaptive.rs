@@ -1,5 +1,5 @@
+use crate::classifiers::NaiveBayes;
 use crate::classifiers::attribute_class_observers::AttributeClassObserver;
-use crate::classifiers::bayes::naive_bayes::NaiveBayes;
 use crate::classifiers::hoeffding_tree::hoeffding_tree::HoeffdingTree;
 use crate::classifiers::hoeffding_tree::nodes::LearningNode;
 use crate::classifiers::hoeffding_tree::nodes::Node;

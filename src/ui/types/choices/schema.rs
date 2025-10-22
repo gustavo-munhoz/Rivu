@@ -195,3 +195,132 @@ fn detect_field_kind(ty: Option<&Value>) -> Option<FieldKind> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::types::choices::{NoParams, StreamChoice};
+    use schemars::JsonSchema;
+    use serde::{Deserialize, Serialize};
+    use serde_json::{Value, json};
+
+    #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+    #[serde(tag = "type", content = "params", rename_all = "kebab-case")]
+    enum TinyChoice {
+        Unit(NoParams),
+    }
+
+    #[test]
+    fn detect_field_kind_handles_all_primitives() {
+        assert!(matches!(
+            detect_field_kind(Some(&Value::String("string".into()))),
+            Some(FieldKind::String)
+        ));
+        assert!(matches!(
+            detect_field_kind(Some(&Value::String("integer".into()))),
+            Some(FieldKind::Integer)
+        ));
+        assert!(matches!(
+            detect_field_kind(Some(&Value::String("number".into()))),
+            Some(FieldKind::Number)
+        ));
+        assert!(matches!(
+            detect_field_kind(Some(&Value::String("boolean".into()))),
+            Some(FieldKind::Boolean)
+        ));
+        assert!(detect_field_kind(Some(&Value::String("object".into()))).is_none());
+        assert!(detect_field_kind(None).is_none());
+    }
+
+    #[test]
+    fn detect_field_kind_handles_nullable_union() {
+        let a = Value::Array(vec![
+            Value::String("null".into()),
+            Value::String("integer".into()),
+        ]);
+        let b = Value::Array(vec![
+            Value::String("integer".into()),
+            Value::String("null".into()),
+        ]);
+        assert!(matches!(
+            detect_field_kind(Some(&a)),
+            Some(FieldKind::Integer)
+        ));
+        assert!(matches!(
+            detect_field_kind(Some(&b)),
+            Some(FieldKind::Integer)
+        ));
+    }
+
+    #[test]
+    fn resolve_ref_obj_direct_returns_self() {
+        let root = json!({"$defs": {}}).as_object().unwrap().clone();
+        let me = json!({"type":"integer"}).as_object().unwrap().clone();
+        let out = resolve_ref_obj(&root, &me).unwrap();
+        assert_eq!(out.get("type").and_then(Value::as_str), Some("integer"));
+    }
+
+    #[test]
+    fn resolve_ref_obj_follow_refs_and_unescape() {
+        let root = json!({
+            "$defs": {
+                "a~b": { "inner/seg": { "type": "number" } }
+            }
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        // ref to "#/$defs/a~0b/inner~1seg" (escaped "~" and "/")
+        let obj = json!({ "$ref": "#/$defs/a~0b/inner~1seg" })
+            .as_object()
+            .unwrap()
+            .clone();
+
+        let out = resolve_ref_obj(&root, &obj).expect("ref resolved");
+        assert_eq!(out.get("type").and_then(Value::as_str), Some("number"));
+    }
+
+    #[test]
+    fn discriminant_matches_via_const_and_enum() {
+        let props_const = json!({
+            "type": { "const": "sea-generator" }
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        let props_enum = json!({
+            "type": { "enum": ["sea-generator"] }
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        assert!(discriminant_matches(&props_const, "sea-generator"));
+        assert!(discriminant_matches(&props_enum, "sea-generator"));
+        assert!(!discriminant_matches(&props_const, "other"));
+    }
+
+    #[test]
+    fn specs_for_kind_on_variant_with_no_params_is_empty() {
+        let root = super::schema_for::<TinyChoice>();
+        let v = specs_for_kind(&root, "unit").expect("ok");
+        assert!(v.is_empty());
+    }
+
+    #[test]
+    fn specs_for_kind_kind_not_found_errors() {
+        let root = super::schema_for::<StreamChoice>();
+        let err = specs_for_kind(&root, "does-not-exist").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("no branch found"), "msg was: {msg}");
+    }
+
+    #[test]
+    fn schema_for_wrapper_returns_object_like_schema() {
+        let sch = super::schema_for::<StreamChoice>();
+        let obj = sch.as_object().expect("root object");
+        assert!(obj.contains_key("oneOf") || obj.contains_key("anyOf"));
+    }
+}
