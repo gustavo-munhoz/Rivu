@@ -1,6 +1,6 @@
 use crate::classifiers::attribute_class_observers::attribute_class_observer::AttributeClassObserver;
 use crate::classifiers::conditional_tests::attribute_split_suggestion::AttributeSplitSuggestion;
-use crate::classifiers::hoeffding_tree::NumericAttributeBinaryTest;
+use crate::classifiers::hoeffding_tree::instance_conditional_test::NumericAttributeBinaryTest;
 use crate::classifiers::hoeffding_tree::split_criteria::SplitCriterion;
 use crate::core::estimators::gaussian_estimator::GaussianEstimator;
 use std::any::Any;

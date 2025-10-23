@@ -1,7 +1,9 @@
 pub mod attribute_class_observers;
-pub mod bayes;
-pub mod classifier;
+mod bayes;
+mod classifier;
 mod conditional_tests;
-mod hoeffding_tree;
+pub mod hoeffding_tree;
 
+pub use bayes::NaiveBayes;
 pub use classifier::Classifier;
+pub use hoeffding_tree::HoeffdingTree;

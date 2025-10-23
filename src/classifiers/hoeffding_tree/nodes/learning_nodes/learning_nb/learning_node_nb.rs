@@ -1,5 +1,5 @@
+use crate::classifiers::NaiveBayes;
 use crate::classifiers::attribute_class_observers::AttributeClassObserver;
-use crate::classifiers::bayes::naive_bayes::NaiveBayes;
 use crate::classifiers::hoeffding_tree::hoeffding_tree::HoeffdingTree;
 use crate::classifiers::hoeffding_tree::nodes::FoundNode;
 use crate::classifiers::hoeffding_tree::nodes::LearningNode;
@@ -83,7 +83,7 @@ impl Node for LearningNodeNB {
 
     fn get_class_votes(&self, instance: &dyn Instance, hoeffding_tree: &HoeffdingTree) -> Vec<f64> {
         if let Some(threshold) = hoeffding_tree.get_nb_threshold() {
-            if self.get_weight_seen() >= threshold {
+            if self.get_weight_seen() >= threshold as f64 {
                 return NaiveBayes::do_naive_bayes_prediction(
                     instance,
                     &self.observed_class_distribution,
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn test_learn_from_instance_initializes_attribute_observers() {
         let mut node = LearningNodeNB::new(vec![1.0, 1.0]);
-        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let tree = HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let instance = MockInstance::new(vec![0.0, 1.0, 2.0], 2, Some(0.0), 1.0);
 
         node.learn_from_instance(&instance, &tree);
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn learn_from_instance_with_valid_class_index_updates_distribution() {
         let mut node = LearningNodeNB::new(vec![0.0, 0.0, 0.0, 0.0, 0.0]);
-        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let tree = HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let instance = MockInstance::new(vec![1.0, 2.0, 3.0], 2, Some(2.0), 1.5);
 
         node.learn_from_instance(&instance, &tree);
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn learn_from_instance_expands_distribution_when_needed() {
         let mut node = LearningNodeNB::new(vec![0.0]);
-        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let tree = HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let instance = MockInstance::new(vec![1.0, 2.0, 3.0], 0, Some(5.0), 1.0);
 
         node.learn_from_instance(&instance, &tree);
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn learn_from_instance_with_safe_guard_does_not_panic_if_checked() {
         let mut node = LearningNodeNB::new(vec![0.0]);
-        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let tree = HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let instance = MockInstance::new(vec![1.0], 5, Some(0.0), 1.0);
 
         if let Some(class_idx) = instance.class_value() {

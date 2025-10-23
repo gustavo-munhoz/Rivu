@@ -2,14 +2,14 @@ use crate::classifiers::Classifier;
 use crate::classifiers::attribute_class_observers::{
     AttributeClassObserver, GaussianNumericAttributeClassObserver, NominalAttributeClassObserver,
 };
-use crate::classifiers::hoeffding_tree::InstanceConditionalTest;
+use crate::classifiers::hoeffding_tree::instance_conditional_test::InstanceConditionalTest;
 use crate::classifiers::hoeffding_tree::leaf_prediction_option::LeafPredictionOption;
 use crate::classifiers::hoeffding_tree::nodes::{
     ActiveLearningNode, FoundNode, InactiveLearningNode, LearningNode, LearningNodeNB,
     LearningNodeNBAdaptive, Node, SplitNode,
 };
+use crate::classifiers::hoeffding_tree::split_criteria::GiniSplitCriterion;
 use crate::classifiers::hoeffding_tree::split_criteria::SplitCriterion;
-use crate::classifiers::hoeffding_tree::split_criteria::gini_split_criterion::GiniSplitCriterion;
 use crate::core::instance_header::InstanceHeader;
 use crate::core::instances::Instance;
 use std::cell::RefCell;
@@ -25,9 +25,10 @@ pub struct HoeffdingTree {
     inactive_leaf_node_count: usize,
     growth_allowed: bool,
     header: Option<Arc<InstanceHeader>>,
+    numeric_estimator: Box<dyn AttributeClassObserver>,
     training_weight_seen_by_model: f64,
     leaf_prediction_option: LeafPredictionOption,
-    nb_threshold_option: Option<f64>,
+    nb_threshold_option: Option<usize>,
     grace_period_option: usize,
     split_criterion_option: Box<dyn SplitCriterion>,
     no_pre_prune_option: bool,
@@ -38,13 +39,27 @@ pub struct HoeffdingTree {
     active_leaf_byte_size_estimate: f64,
     inactive_leaf_byte_size_estimate: f64,
     byte_size_estimate_overhead_fraction: f64,
-    max_byte_size_option: f64,
+    max_byte_size_option: usize,
     stop_mem_management_option: bool,
     memory_estimate_period_option: usize,
 }
 
 impl HoeffdingTree {
-    pub fn new(leaf_prediction_option: LeafPredictionOption) -> Self {
+    pub fn new(
+        max_byte_size: usize,
+        numeric_estimator: Box<dyn AttributeClassObserver>,
+        memory_estimate_period: usize,
+        grace_period: usize,
+        split_criterion: Box<dyn SplitCriterion>,
+        split_confidence: f64,
+        tie_threshold: f64,
+        binary_splits: bool,
+        stop_mem_management: bool,
+        remove_poor_attributes: bool,
+        no_pre_prune: bool,
+        leaf_prediction: LeafPredictionOption,
+        nb_threshold: Option<usize>,
+    ) -> Self {
         Self {
             tree_root: None,
             decision_node_count: 0,
@@ -52,6 +67,35 @@ impl HoeffdingTree {
             inactive_leaf_node_count: 0,
             growth_allowed: true,
             header: None,
+            numeric_estimator,
+            training_weight_seen_by_model: 0.0,
+            leaf_prediction_option: leaf_prediction,
+            nb_threshold_option: nb_threshold,
+            grace_period_option: grace_period,
+            split_criterion_option: split_criterion,
+            no_pre_prune_option: no_pre_prune,
+            binary_splits_option: binary_splits,
+            split_confidence_option: split_confidence,
+            tie_threshold_option: tie_threshold,
+            remove_poor_atts_option: remove_poor_attributes,
+            active_leaf_byte_size_estimate: 0.0,
+            inactive_leaf_byte_size_estimate: 0.0,
+            byte_size_estimate_overhead_fraction: 0.0,
+            max_byte_size_option: max_byte_size,
+            stop_mem_management_option: stop_mem_management,
+            memory_estimate_period_option: memory_estimate_period,
+        }
+    }
+
+    pub fn new_with_only_leaf_prediction(leaf_prediction_option: LeafPredictionOption) -> Self {
+        Self {
+            tree_root: None,
+            decision_node_count: 0,
+            active_leaf_node_count: 0,
+            inactive_leaf_node_count: 0,
+            growth_allowed: true,
+            header: None,
+            numeric_estimator: Box::new(GaussianNumericAttributeClassObserver::new()),
             training_weight_seen_by_model: 0.0,
             leaf_prediction_option,
             nb_threshold_option: None,
@@ -65,17 +109,17 @@ impl HoeffdingTree {
             active_leaf_byte_size_estimate: 0.0,
             inactive_leaf_byte_size_estimate: 0.0,
             byte_size_estimate_overhead_fraction: 0.0,
-            max_byte_size_option: f64::INFINITY,
+            max_byte_size_option: usize::MAX,
             stop_mem_management_option: false,
             memory_estimate_period_option: 1000,
         }
     }
 
-    pub fn set_nb_threshold(&mut self, threshold: f64) {
+    pub fn set_nb_threshold(&mut self, threshold: usize) {
         self.nb_threshold_option = Some(threshold);
     }
 
-    pub fn get_nb_threshold(&self) -> Option<f64> {
+    pub fn get_nb_threshold(&self) -> Option<usize> {
         self.nb_threshold_option
     }
 
@@ -369,7 +413,7 @@ impl HoeffdingTree {
             + self.inactive_leaf_node_count as f64 * self.inactive_leaf_byte_size_estimate)
             * self.byte_size_estimate_overhead_fraction;
 
-        if self.inactive_leaf_node_count > 0 || memory_usage > self.max_byte_size_option {
+        if self.inactive_leaf_node_count > 0 || memory_usage > self.max_byte_size_option as f64 {
             if self.stop_mem_management_option {
                 self.growth_allowed = false;
                 return;
@@ -392,7 +436,7 @@ impl HoeffdingTree {
                         * self.inactive_leaf_byte_size_estimate)
                     * self.byte_size_estimate_overhead_fraction;
 
-                if est > self.max_byte_size_option {
+                if est > self.max_byte_size_option as f64 {
                     max_active -= 1;
                     break;
                 }
@@ -465,10 +509,11 @@ impl HoeffdingTree {
             * self.active_leaf_byte_size_estimate)
             + (self.inactive_leaf_node_count as f64 * self.inactive_leaf_byte_size_estimate);
 
-        let actual_model_size = self.calc_byte_size() as f64;
+        let actual_model_size = self.calc_byte_size();
 
         if estimate_model_size > 0.0 {
-            self.byte_size_estimate_overhead_fraction = actual_model_size / estimate_model_size;
+            self.byte_size_estimate_overhead_fraction =
+                actual_model_size as f64 / estimate_model_size;
         }
 
         if actual_model_size > self.max_byte_size_option {
@@ -775,30 +820,31 @@ mod tests {
 
     #[test]
     fn test_set_and_get_nb_threshold() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
 
-        tree.set_nb_threshold(0.75);
-        assert_eq!(tree.get_nb_threshold(), Some(0.75));
-
-        tree.set_nb_threshold(1.5);
-        assert_eq!(tree.get_nb_threshold(), Some(1.5));
+        tree.set_nb_threshold(42);
+        assert_eq!(tree.get_nb_threshold(), Some(42));
     }
 
     #[test]
     fn test_get_no_pre_prune_option_default() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         assert_eq!(tree.get_no_pre_prune_option(), false);
     }
 
     #[test]
     fn test_get_binary_splits_option_default() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         assert_eq!(tree.get_binary_splits_option(), true);
     }
 
     #[test]
     fn test_default_tree_initial_state() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
 
         assert!(tree.tree_root.is_none());
         assert_eq!(tree.active_leaf_node_count, 0);
@@ -835,7 +881,8 @@ mod tests {
 
     #[test]
     fn test_new_learning_node_majority_class() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let node = tree.new_learning_node();
         let node_ref = node.borrow();
 
@@ -844,7 +891,7 @@ mod tests {
 
     #[test]
     fn test_new_learning_node_naive_bayes() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let tree = HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let node = tree.new_learning_node();
         let node_ref = node.borrow();
 
@@ -853,7 +900,8 @@ mod tests {
 
     #[test]
     fn test_new_learning_node_adaptive_naive_bayes() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::AdaptiveNaiveBayes);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::AdaptiveNaiveBayes);
         let node = tree.new_learning_node();
         let node_ref = node.borrow();
 
@@ -862,7 +910,8 @@ mod tests {
 
     #[test]
     fn test_new_nominal_class_observer() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let obs = tree.new_nominal_class_observer();
 
         assert!(obs.as_any().is::<NominalAttributeClassObserver>());
@@ -870,7 +919,8 @@ mod tests {
 
     #[test]
     fn test_new_numeric_class_observer() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let obs = tree.new_numeric_class_observer();
 
         assert!(obs.as_any().is::<GaussianNumericAttributeClassObserver>());
@@ -878,7 +928,8 @@ mod tests {
 
     #[test]
     fn test_compute_hoeffding_bound() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let bound = tree.compute_hoeffding_bound(1.0, 0.05, 1000.0);
         let expected = ((1.0_f64.powi(2) * ((1.0 / 0.05) as f64).ln()) / (2.0 * 1000.0)).sqrt();
 
@@ -887,7 +938,8 @@ mod tests {
 
     #[test]
     fn test_deactivate_learning_node_replaces_with_inactive() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let active_node = tree.new_learning_node();
         tree.tree_root = Some(active_node.clone());
         tree.active_leaf_node_count = 1;
@@ -905,7 +957,8 @@ mod tests {
 
     #[test]
     fn test_activate_learning_node_replaces_with_active() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let inactive_node = Rc::new(RefCell::new(InactiveLearningNode::new(vec![1.0, 2.0])));
         tree.tree_root = Some(inactive_node.clone());
         tree.active_leaf_node_count = 0;
@@ -927,7 +980,8 @@ mod tests {
 
     #[test]
     fn test_deactivate_learning_node_updates_parent_child() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let active_node = tree.new_learning_node();
         let split_node = Rc::new(RefCell::new(SplitNode::new_dummy(vec![1.0, 1.0], 1)));
         split_node.borrow_mut().set_child(0, active_node.clone());
@@ -945,7 +999,8 @@ mod tests {
 
     #[test]
     fn test_new_split_node_creates_splitnode() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let split_test = Box::new(DummyTest::new(2));
         let class_observations = vec![1.0, 2.0];
         let node = tree.new_split_node(split_test, class_observations.clone(), 2);
@@ -964,7 +1019,8 @@ mod tests {
 
     #[test]
     fn test_find_learning_nodes_single_root() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let leaf = tree.new_learning_node();
         tree.tree_root = Some(leaf.clone());
         tree.active_leaf_node_count = 1;
@@ -980,7 +1036,8 @@ mod tests {
 
     #[test]
     fn test_find_learning_nodes_with_splitnode() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
 
         let child1 = tree.new_learning_node();
         let child2 = tree.new_learning_node();
@@ -1020,7 +1077,8 @@ mod tests {
 
     #[test]
     fn test_attempt_to_split_creates_splitnode_when_should_split_is_true() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         tree.split_criterion_option = Box::new(DummyCriterion);
         tree.split_confidence_option = 1.0;
         tree.tie_threshold_option = 0.0;
@@ -1078,7 +1136,8 @@ mod tests {
 
     #[test]
     fn test_attempt_to_split_does_nothing_when_pure_destribution() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let active_node = Rc::new(RefCell::new(ActiveLearningNode::new(vec![10.0, 0.0])));
         tree.tree_root = Some(active_node.clone());
         tree.active_leaf_node_count = 1;
@@ -1095,10 +1154,11 @@ mod tests {
 
     #[test]
     fn test_enforce_tracker_limit_stops_growth_when_stop_option_enabled() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         tree.stop_mem_management_option = true;
         tree.inactive_leaf_node_count = 1;
-        tree.max_byte_size_option = 0.1;
+        tree.max_byte_size_option = 1;
         tree.growth_allowed = true;
 
         tree.enforce_tracker_limit();
@@ -1108,8 +1168,9 @@ mod tests {
 
     #[test]
     fn test_enforce_tracker_limit_deactivates_active_nodes_when_over_limit() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
-        tree.max_byte_size_option = 1.0;
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
+        tree.max_byte_size_option = 1;
         tree.active_leaf_byte_size_estimate = 10.0;
         tree.inactive_leaf_byte_size_estimate = 5.0;
         tree.byte_size_estimate_overhead_fraction = 1.0;
@@ -1133,8 +1194,9 @@ mod tests {
 
     #[test]
     fn test_enforce_tracker_limit_reactivates_inactive_nodes_when_under_limit() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
-        tree.max_byte_size_option = 10_000.0;
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
+        tree.max_byte_size_option = 10_000;
         tree.active_leaf_byte_size_estimate = 1.0;
         tree.inactive_leaf_byte_size_estimate = 1.0;
         tree.byte_size_estimate_overhead_fraction = 1.0;
@@ -1156,7 +1218,8 @@ mod tests {
 
     #[test]
     fn test_calc_byte_size_basic() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let node = tree.new_learning_node();
         tree.tree_root = Some(node.clone());
 
@@ -1169,7 +1232,8 @@ mod tests {
 
     #[test]
     fn test_estimate_model_byte_sizes_computes_estimates() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
 
         let active_node = tree.new_learning_node();
         let inactive_node = Rc::new(RefCell::new(InactiveLearningNode::new(vec![1.0, 2.0])));
@@ -1210,7 +1274,8 @@ mod tests {
 
     #[test]
     fn test_set_model_context_assigns_header() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
 
         let vals = vec!["A".to_string(), "B".to_string()];
         let mut map = HashMap::new();
@@ -1228,7 +1293,7 @@ mod tests {
 
     #[test]
     fn test_get_votes_for_instance_with_empty_tree() {
-        let tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let tree = HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         let instance = DummyInstance {
             weight: 1.0,
             class_val: 0,
@@ -1242,7 +1307,8 @@ mod tests {
 
     #[test]
     fn test_get_votes_for_instance_returns_leaf_distribution() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let node = Rc::new(RefCell::new(InactiveLearningNode::new(vec![3.0, 1.0])));
 
         tree.tree_root = Some(node.clone());
@@ -1259,7 +1325,8 @@ mod tests {
 
     #[test]
     fn test_train_on_instance_initializes_tree_root() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         assert!(tree.tree_root.is_none());
 
         let instance = DummyInstance {
@@ -1277,7 +1344,8 @@ mod tests {
 
     #[test]
     fn test_train_on_instance_updates_active_leaf_distribution() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         let instance = DummyInstance {
             weight: 2.0,
             class_val: 0,
@@ -1296,7 +1364,8 @@ mod tests {
 
     #[test]
     fn test_train_on_instance_triggers_estimate_model_byte_sizes() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::NaiveBayes);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::NaiveBayes);
         tree.memory_estimate_period_option = 1;
         tree.training_weight_seen_by_model = 0.0;
 
@@ -1312,7 +1381,8 @@ mod tests {
 
     #[test]
     fn test_train_on_instance_does_not_split_when_grace_period_not_met() {
-        let mut tree = HoeffdingTree::new(LeafPredictionOption::MajorityClass);
+        let mut tree =
+            HoeffdingTree::new_with_only_leaf_prediction(LeafPredictionOption::MajorityClass);
         tree.grace_period_option = 100;
 
         let instance = DummyInstance {

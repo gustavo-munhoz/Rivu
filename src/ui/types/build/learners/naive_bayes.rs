@@ -1,8 +1,8 @@
-use crate::classifiers::bayes::naive_bayes::NaiveBayes;
-use crate::ui::types::choices::NoLearnerParams;
+use crate::classifiers::NaiveBayes;
+use crate::ui::types::choices::NoParams;
 
-impl From<NoLearnerParams> for NaiveBayes {
-    fn from(_: NoLearnerParams) -> Self {
+impl From<NoParams> for NaiveBayes {
+    fn from(_: NoParams) -> Self {
         NaiveBayes::new()
     }
 }

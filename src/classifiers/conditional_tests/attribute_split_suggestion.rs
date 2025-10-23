@@ -1,4 +1,4 @@
-use crate::classifiers::hoeffding_tree::InstanceConditionalTest;
+use crate::classifiers::hoeffding_tree::instance_conditional_test::InstanceConditionalTest;
 use std::cmp::Ordering;
 
 pub struct AttributeSplitSuggestion {
