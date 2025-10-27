@@ -1,9 +1,11 @@
 use crate::classifiers::NaiveBayes;
 use crate::classifiers::attribute_class_observers::AttributeClassObserver;
+use crate::classifiers::conditional_tests::attribute_split_suggestion::AttributeSplitSuggestion;
 use crate::classifiers::hoeffding_tree::hoeffding_tree::HoeffdingTree;
 use crate::classifiers::hoeffding_tree::nodes::LearningNode;
 use crate::classifiers::hoeffding_tree::nodes::Node;
 use crate::classifiers::hoeffding_tree::nodes::found_node::FoundNode;
+use crate::classifiers::hoeffding_tree::split_criteria::SplitCriterion;
 use crate::core::attributes::NominalAttribute;
 use crate::core::instances::Instance;
 use std::any::Any;
@@ -104,6 +106,38 @@ impl LearningNodeNBAdaptive {
     pub fn num_non_zero_entries(vec: &Vec<f64>) -> usize {
         vec.iter().filter(|&&x| x != 0.0).count()
     }
+
+    pub fn get_best_split_suggestions(
+        &self,
+        criterion: &dyn SplitCriterion,
+        ht: &HoeffdingTree,
+    ) -> Vec<AttributeSplitSuggestion> {
+        let mut best_suggestions: Vec<AttributeSplitSuggestion> = Vec::new();
+        let pre_split_distribution = self.observed_class_distribution.clone();
+        if !ht.get_no_pre_prune_option() {
+            let merit = criterion
+                .get_merit_of_split(&pre_split_distribution, &[pre_split_distribution.clone()]);
+            best_suggestions.push(AttributeSplitSuggestion::new(
+                None,
+                vec![pre_split_distribution.clone()],
+                merit,
+            ));
+        }
+
+        for (i, obs_opt) in self.attribute_observers.iter().enumerate() {
+            if let Some(obs) = obs_opt {
+                if let Some(best_suggestion) = obs.get_best_evaluated_split_suggestion(
+                    criterion,
+                    &pre_split_distribution,
+                    i,
+                    ht.get_binary_splits_option(),
+                ) {
+                    best_suggestions.push(best_suggestion)
+                }
+            }
+        }
+        best_suggestions
+    }
 }
 
 impl Node for LearningNodeNBAdaptive {
@@ -116,29 +150,24 @@ impl Node for LearningNodeNBAdaptive {
     }
 
     fn filter_instance_to_leaf(
-        self_arc: Rc<RefCell<Self>>,
-        instance: &dyn Instance,
+        &self,
+        self_arc: Rc<RefCell<dyn Node>>,
+        _instance: &dyn Instance,
         parent: Option<Rc<RefCell<dyn Node>>>,
         parent_branch: isize,
     ) -> FoundNode {
         FoundNode::new(Some(self_arc), parent, parent_branch)
     }
 
-    fn filter_instance_to_leaf_dyn(
-        &self,
-        self_arc_dyn: Rc<RefCell<dyn Node>>,
-        _instance: &dyn Instance,
-        parent: Option<Rc<RefCell<dyn Node>>>,
-        parent_branch: isize,
-    ) -> FoundNode {
-        FoundNode::new(Some(self_arc_dyn), parent, parent_branch)
-    }
-
     fn get_observed_class_distribution_at_leaves_reachable_through_this_node(&self) -> Vec<f64> {
         self.observed_class_distribution.clone()
     }
 
-    fn get_class_votes(&self, instance: &dyn Instance, hoeffding_tree: &HoeffdingTree) -> Vec<f64> {
+    fn get_class_votes(
+        &self,
+        instance: &dyn Instance,
+        _hoeffding_tree: &HoeffdingTree,
+    ) -> Vec<f64> {
         if self.mc_correct_weight > self.nb_correct_weight {
             return self.observed_class_distribution.clone();
         }
@@ -158,7 +187,7 @@ impl Node for LearningNodeNBAdaptive {
     }
 
     fn observed_class_distribution_is_pure(&self) -> bool {
-        Self::num_non_zero_entries(&self.observed_class_distribution) < 1
+        Self::num_non_zero_entries(&self.observed_class_distribution) < 2
     }
     fn calc_byte_size(&self) -> usize {
         let mut total = size_of::<Self>();

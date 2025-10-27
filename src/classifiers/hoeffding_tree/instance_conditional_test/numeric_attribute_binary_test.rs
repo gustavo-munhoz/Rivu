@@ -20,12 +20,18 @@ impl NumericAttributeBinaryTest {
 
 impl InstanceConditionalTest for NumericAttributeBinaryTest {
     fn branch_for_instance(&self, instance: &dyn Instance) -> Option<usize> {
+        let index = self.attribute_index;
+
+        if instance.is_missing_at_index(index).unwrap_or(true) {
+            return None;
+        }
+
         let value = instance.value_at_index(self.attribute_index)?;
 
-        if value == self.attribute_value as f64 {
+        if value == self.attribute_value {
             return Some(if self.equals_passes_test { 0 } else { 1 });
         }
-        if value < self.attribute_value as f64 {
+        if value < self.attribute_value {
             return Some(0);
         }
         Some(1)
@@ -204,7 +210,7 @@ mod tests {
         let test = NumericAttributeBinaryTest::new(0, 3.5, true);
         assert_eq!(
             test.calc_byte_size(),
-            std::mem::size_of::<NumericAttributeBinaryTest>()
+            size_of::<NumericAttributeBinaryTest>()
         );
     }
 

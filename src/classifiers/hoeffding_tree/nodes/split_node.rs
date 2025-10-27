@@ -71,46 +71,28 @@ impl Node for SplitNode {
     }
 
     fn filter_instance_to_leaf(
-        self_arc: Rc<RefCell<Self>>,
-        instance: &dyn Instance,
-        parent: Option<Rc<RefCell<dyn Node>>>,
-        parent_branch: isize,
-    ) -> FoundNode
-    where
-        Self: Sized,
-    {
-        let child_index = {
-            let this = self_arc.borrow();
-            this.instance_child_index(instance)
-        };
-
-        if let Some(idx) = child_index {
-            if let Some(child_arc) = self_arc.borrow().get_child(idx) {
-                let child_guard = child_arc.borrow();
-                return child_guard.filter_instance_to_leaf_dyn(
-                    child_arc.clone(),
-                    instance,
-                    Some(self_arc.clone()),
-                    idx as isize,
-                );
-            }
-            return FoundNode::new(None, Some(self_arc), idx as isize);
-        }
-        FoundNode::new(
-            Some(self_arc.clone() as Rc<RefCell<dyn Node>>),
-            parent,
-            parent_branch,
-        )
-    }
-
-    fn filter_instance_to_leaf_dyn(
         &self,
-        self_arc_dyn: Rc<RefCell<dyn Node>>,
+        self_arc: Rc<RefCell<dyn Node>>,
         instance: &dyn Instance,
         parent: Option<Rc<RefCell<dyn Node>>>,
         parent_branch: isize,
     ) -> FoundNode {
-        FoundNode::new(Some(self_arc_dyn), parent, parent_branch)
+        let child_index = self.instance_child_index(instance);
+        if let Some(idx) = child_index {
+            if let Some(child_rc) = self.get_child(idx) {
+                let child = child_rc.borrow();
+                let found = child.filter_instance_to_leaf(
+                    Rc::clone(&child_rc),
+                    instance,
+                    Some(Rc::clone(&self_arc)),
+                    idx as isize,
+                );
+                return found;
+            }
+            return FoundNode::new(None, Some(Rc::clone(&self_arc)), idx as isize);
+        }
+
+        FoundNode::new(Some(Rc::clone(&self_arc)), parent, parent_branch)
     }
 
     fn get_observed_class_distribution_at_leaves_reachable_through_this_node(&self) -> Vec<f64> {
@@ -277,27 +259,37 @@ mod tests {
         node.set_child(1, leaf2);
 
         let summed = node.get_observed_class_distribution_at_leaves_reachable_through_this_node();
-        assert_eq!(summed, vec![6.0, 4.0]); // (2+4 , 3+1)
+        assert_eq!(summed, vec![6.0, 4.0]);
     }
 
     #[test]
     fn test_filter_instance_to_leaf_routes_to_real_node() {
         let test = Box::new(DummyTest { branch: Some(0) });
-        let test = Box::new(DummyTest { branch: Some(0) });
-        let node_arc = Rc::new(RefCell::new(SplitNode::new(test, vec![1.0, 2.0], Some(1))));
+        let node_arc: Rc<RefCell<dyn Node>> =
+            Rc::new(RefCell::new(SplitNode::new(test, vec![1.0, 2.0], Some(1))));
 
         let leaf = Rc::new(RefCell::new(InactiveLearningNode::new(vec![3.0, 7.0])));
-        node_arc.borrow_mut().set_child(0, leaf.clone());
+
+        {
+            let mut guard = node_arc.borrow_mut();
+
+            if let Some(split_node) = guard.as_any_mut().downcast_mut::<SplitNode>() {
+                split_node.set_child(0, leaf.clone());
+            } else {
+                panic!("Not a SplitNode");
+            }
+        }
 
         let inst = make_instance(1.0);
 
-        let found = SplitNode::filter_instance_to_leaf(node_arc.clone(), inst.as_ref(), None, 0);
+        let found = {
+            let guard = node_arc.borrow();
+            guard.filter_instance_to_leaf(node_arc.clone(), inst.as_ref(), None, 0isize)
+        };
 
         assert!(found.get_node().is_some());
-
         let found_node_arc = found.get_node().unwrap();
         let found_guard = found_node_arc.borrow();
-
         assert_eq!(
             found_guard.get_observed_class_distribution(),
             &vec![3.0, 7.0]
