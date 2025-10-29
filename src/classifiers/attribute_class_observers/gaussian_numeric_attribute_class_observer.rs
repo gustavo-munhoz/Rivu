@@ -27,10 +27,11 @@ impl GaussianNumericAttributeClassObserver {
             let new_len = class_val + 1;
             self.attribute_value_distribution_per_class
                 .resize_with(new_len, || None);
+
             self.min_value_observed_per_class
-                .resize(new_len, f64::INFINITY);
+                .resize_with(new_len, || 0.0);
             self.max_value_observed_per_class
-                .resize(new_len, f64::NEG_INFINITY);
+                .resize_with(new_len, || 0.0);
         }
     }
 
@@ -100,31 +101,28 @@ impl GaussianNumericAttributeClassObserver {
 
 impl AttributeClassObserver for GaussianNumericAttributeClassObserver {
     fn observe_attribute_class(&mut self, att_val: f64, class_val: usize, weight: f64) {
-        if att_val.is_nan() {
-            return;
-        }
-        let w = if weight.is_finite() {
-            weight.max(0.0)
-        } else {
-            0.0
-        };
-        if w == 0.0 {
+        if att_val.is_nan() || !weight.is_finite() || weight <= 0.0 {
             return;
         }
 
         self.ensure_class(class_val);
 
-        let est = self.attribute_value_distribution_per_class[class_val]
-            .get_or_insert_with(GaussianEstimator::new);
-
-        if att_val < self.min_value_observed_per_class[class_val] {
+        let val_dist = &mut self.attribute_value_distribution_per_class[class_val];
+        if val_dist.is_none() {
+            let mut new_est = GaussianEstimator::new();
+            new_est.add_observation(att_val, weight);
+            *val_dist = Some(new_est);
             self.min_value_observed_per_class[class_val] = att_val;
-        }
-        if att_val > self.max_value_observed_per_class[class_val] {
             self.max_value_observed_per_class[class_val] = att_val;
+        } else {
+            if att_val < self.min_value_observed_per_class[class_val] {
+                self.min_value_observed_per_class[class_val] = att_val;
+            }
+            if att_val > self.max_value_observed_per_class[class_val] {
+                self.max_value_observed_per_class[class_val] = att_val;
+            }
+            val_dist.as_mut().unwrap().add_observation(att_val, weight);
         }
-
-        est.add_observation(att_val, w);
     }
 
     fn probability_of_attribute_value_given_class(
@@ -136,7 +134,13 @@ impl AttributeClassObserver for GaussianNumericAttributeClassObserver {
             return None;
         }
         match self.attribute_value_distribution_per_class.get(class_val) {
-            Some(Some(est)) => Some(est.probability_density(att_val)),
+            Some(Some(est)) => {
+                if est.get_total_weight_observed() <= 0.0 {
+                    None
+                } else {
+                    Some(est.probability_density(att_val))
+                }
+            }
             _ => None,
         }
     }
@@ -146,7 +150,7 @@ impl AttributeClassObserver for GaussianNumericAttributeClassObserver {
         criterion: &dyn SplitCriterion,
         pre_split_dist: &[f64],
         att_index: usize,
-        binary_only: bool,
+        _binary_only: bool,
     ) -> Option<AttributeSplitSuggestion> {
         let split_points = self.get_split_point_suggestions();
         let mut best: Option<AttributeSplitSuggestion> = None;

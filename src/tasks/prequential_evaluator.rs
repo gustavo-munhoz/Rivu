@@ -106,6 +106,11 @@ impl PrequentialEvaluator {
             };
             self.processed += 1;
 
+            // TODO: Remove this
+            if self.processed == 581012 {
+                println!("last element");
+            }
+
             let votes = self.learner.get_votes_for_instance(&*instance);
 
             self.evaluator.add_result(&*instance, votes);

@@ -24,13 +24,17 @@ impl InstanceConditionalTest for NominalAttributeBinaryTest {
             self.attribute_index + 1
         };
 
-        if instance.is_missing_at_index(index).ok()? {
+        if instance.is_missing_at_index(index).unwrap_or(true) {
             return None;
         }
 
         let value = instance.value_at_index(index)?;
 
-        Some((value as usize != self.attribute_value) as usize)
+        if value as usize == self.attribute_value {
+            Some(0)
+        } else {
+            Some(1)
+        }
     }
 
     fn result_known_for_instance(&self, instance: &dyn Instance) -> bool {

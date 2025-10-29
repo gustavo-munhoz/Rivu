@@ -33,22 +33,13 @@ impl Node for InactiveLearningNode {
     }
 
     fn filter_instance_to_leaf(
-        self_arc: Rc<RefCell<Self>>,
-        instance: &dyn Instance,
-        parent: Option<Rc<RefCell<dyn Node>>>,
-        parent_branch: isize,
-    ) -> FoundNode {
-        FoundNode::new(Some(self_arc), parent, parent_branch)
-    }
-
-    fn filter_instance_to_leaf_dyn(
         &self,
-        self_arc_dyn: Rc<RefCell<dyn Node>>,
+        self_arc: Rc<RefCell<dyn Node>>,
         _instance: &dyn Instance,
         parent: Option<Rc<RefCell<dyn Node>>>,
         parent_branch: isize,
     ) -> FoundNode {
-        FoundNode::new(Some(self_arc_dyn), parent, parent_branch)
+        FoundNode::new(Some(self_arc), parent, parent_branch)
     }
 
     fn get_observed_class_distribution_at_leaves_reachable_through_this_node(&self) -> Vec<f64> {

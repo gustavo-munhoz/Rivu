@@ -5,21 +5,13 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub trait Node {
+pub trait Node: Any {
     fn get_observed_class_distribution(&self) -> &Vec<f64>;
     fn is_leaf(&self) -> bool;
     fn filter_instance_to_leaf(
-        self_arc: Rc<RefCell<Self>>,
-        instance: &dyn Instance,
-        parent: Option<Rc<RefCell<dyn Node>>>,
-        parent_branch: isize,
-    ) -> FoundNode
-    where
-        Self: Sized;
-    fn filter_instance_to_leaf_dyn(
         &self,
-        self_arc_dyn: Rc<RefCell<dyn Node>>,
-        _instance: &dyn Instance,
+        self_arc: Rc<RefCell<dyn Node>>,
+        instance: &dyn Instance,
         parent: Option<Rc<RefCell<dyn Node>>>,
         parent_branch: isize,
     ) -> FoundNode;
